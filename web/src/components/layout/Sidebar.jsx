@@ -29,7 +29,6 @@ const Sidebar = ({ onCollapse }) => {
                 }`
               }
             >
-              <span className="font-semibold">{route.label.charAt(0)}</span>
               <span className="truncate">{route.label}</span>
             </NavLink>
           ))}
