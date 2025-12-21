@@ -350,12 +350,11 @@ router.delete('/:id', requireAuth, async (req, res, next) => {
     const target = val ?? req.params.id;
     try {
       const { error } = await supabase.from(table).delete().eq(col, target);
-      if (error && !['PGRST204', '42P01', 'PGRST116'].includes(error.code)) throw error;
-    } catch (err) {
-      // if table does not exist or view missing, ignore; otherwise propagate
-      if (!['PGRST204', '42P01', 'PGRST116'].includes(err.code)) {
-        throw err;
+      if (error) {
+        console.warn(`Delete cascade skipped for ${table}: ${error.message || error.code || error}`);
       }
+    } catch (err) {
+      console.warn(`Delete cascade error for ${table}: ${err.message || err.code || err}`);
     }
   };
 
@@ -371,10 +370,28 @@ router.delete('/:id', requireAuth, async (req, res, next) => {
       return res.status(404).json({ error: 'Not found' });
     }
 
+    // delete scenario attachments that reference this campaign as base
+    const { data: scenarioRows, error: scenarioFindErr } = await supabase
+      .from('scenarios')
+      .select('id')
+      .eq('base_campaign_id', campaignId);
+    if (scenarioFindErr && !['PGRST116', 'PGRST204'].includes(scenarioFindErr.code)) throw scenarioFindErr;
+    const scenarioIds = (scenarioRows || []).map((r) => r.id);
+
+    for (const sid of scenarioIds) {
+      await safeDelete('scenario_products', 'scenario_id', sid);
+      await safeDelete('scenario_opex', 'scenario_id', sid);
+      await safeDelete('scenario_campaign_links', 'scenario_id', sid);
+    }
+    // delete scenarios themselves
+    await safeDelete('scenarios', 'base_campaign_id', campaignId);
+
     const tables = [
       'campaign_quantities',
       'campaign_month_weights',
       'campaign_size_breakdown',
+      'campaign_product_overrides',
+      'campaign_marketing_totals',
       'campaign_opex',
       'scenario_campaign_links',
     ];
@@ -388,7 +405,9 @@ router.delete('/:id', requireAuth, async (req, res, next) => {
 
     return res.json({ deleted: true, id: campaignId });
   } catch (err) {
-    return next(err);
+    // log to help diagnose which table failed
+    console.error('Delete campaign failed', { campaignId: req.params.id, error: err });
+    return res.status(500).json({ error: 'Failed to delete campaign', detail: err?.message || err?.toString?.() });
   }
 });
 

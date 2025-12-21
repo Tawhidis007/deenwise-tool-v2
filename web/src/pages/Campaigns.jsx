@@ -58,7 +58,6 @@ const ProgressRing = ({ total, current }) => {
     </div>
   );
 };
-
 const CampaignsPage = () => {
   const { currency, setCurrency } = useCurrency();
   const queryClient = useQueryClient();
@@ -152,7 +151,6 @@ const CampaignsPage = () => {
       opex: inputs.campaign?.opex_ids || [],
     });
   }, [inputs, products]);
-
   const createCampMut = useMutation({
     mutationFn: createCampaign,
     onSuccess: (data) => {
@@ -480,7 +478,6 @@ const CampaignsPage = () => {
             </div>
           )}
         </section>
-
         {!products.length ? (
           <div className="muted">No products found. Add products first.</div>
         ) : !selectedCampaign ? (
@@ -511,6 +508,7 @@ const CampaignsPage = () => {
                 ))}
                 {selectedProductObjects.length === 0 && <span className="text-muted text-sm">No products selected.</span>}
               </div>
+
               {selectedProducts.length === 0 ? (
                 <div className="muted">Select at least one product.</div>
               ) : (
@@ -539,8 +537,8 @@ const CampaignsPage = () => {
                         {collapsed ? null : (
                           <>
                             <div className="flex items-center justify-between mb-3 gap-3">
-                              <div className="text-sm font-semibold text-text">Total Qty</div>
-                              <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-text">Total Qty</span>
                                 <input
                                   type="number"
                                   min="0"
@@ -550,8 +548,8 @@ const CampaignsPage = () => {
                                   onChange={(e) => setQty(pid, e.target.value)}
                                   disabled={disabled}
                                 />
-                                <ProgressRing total={totalQty} current={sizeTotal} />
                               </div>
+                              <ProgressRing total={totalQty} current={sizeTotal} />
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
@@ -618,7 +616,6 @@ const CampaignsPage = () => {
                                 />
                               </div>
                             </div>
-
                             {campaignForm?.distribution_mode === "Custom" && (
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                                 {months.map((m, idx) => (
@@ -920,7 +917,6 @@ const CampaignsPage = () => {
           </div>
         </div>
       )}
-
       {showCreateOpex && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
           <div className="bg-surface rounded-lg shadow-xl w-full max-w-xl p-6 space-y-4">
@@ -1055,7 +1051,6 @@ const CampaignsPage = () => {
           </div>
         </div>
       )}
-
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
           <div className="bg-surface rounded-lg shadow-xl w-full max-w-md p-6 space-y-4">
