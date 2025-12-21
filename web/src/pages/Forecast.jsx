@@ -15,6 +15,17 @@ const niceMonth = (label) => {
   return `${names[m - 1]} ${y}`;
 };
 
+const monthDiffInclusive = (startMonthLabel, endMonthLabel) => {
+  if (!startMonthLabel || !endMonthLabel) return 0;
+  const [sy, sm] = startMonthLabel.split("-").map(Number);
+  const [ey, em] = endMonthLabel.split("-").map(Number);
+  if (!sy || !sm || !ey || !em) return 0;
+  const start = sy * 12 + sm;
+  const end = ey * 12 + em;
+  if (end < start) return 0;
+  return end - start + 1;
+};
+
 const fmt = (val, currency) => {
   if (val === undefined || val === null || Number.isNaN(Number(val))) return "--";
   return new Intl.NumberFormat("en-US", {
@@ -118,12 +129,38 @@ const ForecastPage = () => {
 
   const opexTotal = React.useMemo(() => {
     const list = inputs?.campaign?.attached_opex || [];
-    return list.reduce((sum, item) => sum + Number(item?.cost_bdt || 0), 0);
+    const campStart = inputs?.campaign?.start_date;
+    const campEnd = inputs?.campaign?.end_date;
+    if (!campStart || !campEnd) {
+      return list.reduce((sum, item) => sum + Number(item?.cost_bdt || 0), 0);
+    }
+    // normalize campaign start/end to YYYY-MM
+    const toMonthLabel = (dateStr) => {
+      const d = new Date(dateStr);
+      if (Number.isNaN(d.getTime())) return null;
+      const y = d.getFullYear();
+      const m = d.getMonth() + 1;
+      return `${y.toString().padStart(4, "0")}-${m.toString().padStart(2, "0")}`;
+    };
+    const campStartMonth = toMonthLabel(campStart);
+    const campEndMonth = toMonthLabel(campEnd);
+    return list.reduce((sum, item) => {
+      const cost = Number(item?.cost_bdt || 0);
+      if (!cost) return sum;
+      const start = item.start_month || campStartMonth;
+      const end = item.end_month || campEndMonth;
+      // clamp within campaign window
+      const effectiveStart = !campStartMonth ? start : [campStartMonth, start].sort()[1];
+      const effectiveEnd = !campEndMonth ? end : [campEndMonth, end].sort().reverse()[0];
+      const monthsActive = monthDiffInclusive(effectiveStart, effectiveEnd);
+      return sum + cost * (monthsActive || 0);
+    }, 0);
   }, [inputs]);
 
   const totals = forecast?.totals || {};
   const productUnits = totals.campaign_qty || 0;
   const grossRevenue = totals.gross_revenue || 0;
+  const effectiveRevenue = totals.effective_revenue || totals.effective_revenue === 0 ? totals.effective_revenue : grossRevenue;
 
   // Swap per-unit marketing with campaign-level marketing total
   const marketingAdjustedCost =
@@ -185,7 +222,7 @@ const ForecastPage = () => {
       <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-3">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <div>
-            <div className="text-lg font-semibold text-text">Forecast</div>
+            <div className="text-lg font-semibold text-text">Overall Forecast</div>
             <div className="text-sm text-muted">Read-only analytics for planned campaigns</div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -205,6 +242,31 @@ const ForecastPage = () => {
                 </option>
               ))}
             </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <Card title="Product Units" value={productUnits} />
+          <Card title="Gross Revenue" value={fmt(grossRevenue, currency)} />
+          <Card title="Effective Revenue (promo/discount/returns)" value={fmt(effectiveRevenue, currency)} />
+          <Card title="Total Cost (incl. MKT/OPEX/Packaging)" value={fmt(totalCost, currency)} />
+          <Card title="Net Profit" value={fmt(netProfit, currency)} />
+          <Card title="Net Margin" value={pct(netMarginPct)} />
+        </div>
+      </div>
+
+      <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-3">
+        <div className="text-lg font-semibold text-text">Marketing & OPEX</div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card title="Marketing Cost (campaign)" value={fmt(marketingCalc.marketingTotalFinal, currency)} />
+          <Card title="OPEX (linked)" value={fmt(opexTotal, currency)} />
+          <Card title="Total Marketing & OPEX costs" value={fmt(marketingCalc.marketingTotalFinal + opexTotal, currency)} />
+        </div>
+      </div>
+
+      <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-lg font-semibold text-text">Forecast Output</div>
+          <div className="flex items-center gap-2">
             <label className="text-xs text-muted">Month</label>
             <select
               className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text"
@@ -212,7 +274,7 @@ const ForecastPage = () => {
               onChange={(e) => setMonthFilter(e.target.value)}
               disabled={!monthlyOptions.length}
             >
-              <option value="all">All months</option>
+              <option value="all">Full campaign</option>
               {monthlyOptions.map((m) => (
                 <option key={m.value} value={m.value}>
                   {m.label}
@@ -221,27 +283,6 @@ const ForecastPage = () => {
             </select>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <Card title="Product Units" value={productUnits} />
-          <Card title="Gross Revenue" value={fmt(grossRevenue, currency)} />
-          <Card title="Total Cost (incl. MKT & OPEX)" value={fmt(totalCost, currency)} />
-          <Card title="Net Profit" value={fmt(netProfit, currency)} />
-          <Card title="Net Margin" value={pct(netMarginPct)} />
-        </div>
-      </div>
-
-      <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-3">
-        <div className="text-lg font-semibold text-text">Marketing & OPEX</div>
-        <div className="text-sm text-muted">Derived from campaign overrides and linked OPEX</div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card title="Marketing Cost (campaign)" value={fmt(marketingCalc.marketingTotalFinal, currency)} />
-          <Card title="OPEX (linked)" value={fmt(opexTotal, currency)} />
-          <Card title="Total Cost (incl. marketing & OPEX)" value={fmt(totalCost, currency)} />
-        </div>
-      </div>
-
-      <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-3">
-        <div className="text-lg font-semibold text-text">Forecast Output</div>
         <div className="overflow-auto">
           <table className="min-w-full text-sm">
             <thead className="text-left text-muted border-b border-border/60">
@@ -250,7 +291,6 @@ const ForecastPage = () => {
                 <th className="py-2 pr-3">Product</th>
                 <th className="py-2 pr-3">Qty</th>
                 <th className="py-2 pr-3">Gross Rev</th>
-                <th className="py-2 pr-3">Effective Rev</th>
                 <th className="py-2 pr-3">Total Cost</th>
                 <th className="py-2 pr-3">Net Profit</th>
                 <th className="py-2 pr-3">Net Margin</th>
@@ -267,7 +307,6 @@ const ForecastPage = () => {
                     <td className="py-2 pr-3">{row.product_name}</td>
                     <td className="py-2 pr-3">{Math.round(row.qty)}</td>
                     <td className="py-2 pr-3">{fmt(row.gross_revenue, currency)}</td>
-                    <td className="py-2 pr-3">{fmt(row.effective_revenue, currency)}</td>
                     <td className="py-2 pr-3">{fmt(row.total_cost, currency)}</td>
                     <td className="py-2 pr-3">{fmt(row.net_profit, currency)}</td>
                     <td className="py-2 pr-3">{pct(margin)}</td>
