@@ -158,18 +158,22 @@ const ForecastPage = () => {
   }, [inputs]);
 
   const totals = forecast?.totals || {};
-  const productUnits = totals.campaign_qty || 0;
-  const grossRevenue = totals.gross_revenue || 0;
+  const productUnits = Number(totals.campaign_qty || 0);
+  const grossRevenue = Number(totals.gross_revenue || 0);
   const effectiveRevenue = totals.effective_revenue || totals.effective_revenue === 0 ? totals.effective_revenue : grossRevenue;
 
-  // Swap per-unit marketing with campaign-level marketing total
-  const marketingAdjustedCost =
-    (totals.total_cost || 0) - marketingCalc.marketingComponentUsed + marketingCalc.marketingTotalFinal;
-  const marketingAdjustedProfit =
-    (totals.net_profit || 0) + marketingCalc.marketingComponentUsed - marketingCalc.marketingTotalFinal;
+  // Swap per-unit marketing with campaign-level marketing total (avoid NaN)
+  const baseCost = Number(totals.total_cost || 0);
+  const baseProfit = Number(totals.net_profit || 0);
+  const mPerUnit = Number(marketingCalc.marketingComponentUsed || 0);
+  const mCampaign = Number(marketingCalc.marketingTotalFinal || 0);
+  const baseOpex = Number(opexTotal || 0);
 
-  const totalCost = marketingAdjustedCost + opexTotal;
-  const netProfit = marketingAdjustedProfit - opexTotal;
+  const marketingAdjustedCost = baseCost - mPerUnit + mCampaign;
+  const marketingAdjustedProfit = baseProfit + mPerUnit - mCampaign;
+
+  const totalCost = marketingAdjustedCost + baseOpex;
+  const netProfit = marketingAdjustedProfit - baseOpex;
   const netMarginPct = grossRevenue > 0 ? ((netProfit || 0) / grossRevenue) * 100 : 0;
 
   const monthlyOptions = React.useMemo(() => {
@@ -184,10 +188,73 @@ const ForecastPage = () => {
       .map((row) => ({ value: row.month, label: row.month_nice || niceMonth(row.month) }));
   }, [forecast]);
 
-  const monthlyRows =
+  const baseRows =
     monthFilter === "all"
-      ? forecast?.monthly || []
+      ? // aggregate per product for full campaign
+        (forecast?.product_summary || []).map((p) => ({
+          month: "campaign",
+          month_nice: "Full Campaign",
+          product_id: p.product_id,
+          product_name: p.product_name,
+          qty: p.campaign_qty,
+          gross_revenue: p.gross_revenue,
+          effective_revenue: p.effective_revenue,
+          total_cost: p.total_cost,
+          net_profit: p.net_profit,
+        }))
       : (forecast?.monthly || []).filter((r) => r.month === monthFilter);
+
+  // Rebalance marketing and OPEX per row to match campaign-level adjustments
+  const displayRows = React.useMemo(() => {
+    if (!baseRows.length) return [];
+    const perUnitMarketing = (pid) => {
+      const base = productMap[pid];
+      if (!base) return 0;
+      const ov = (inputs?.product_overrides || {})[pid] || {};
+      return Number(ov.marketing_cost_bdt ?? base.marketing_cost_bdt ?? 0);
+    };
+
+    const rowsWithComponents = baseRows.map((row) => {
+      const mPerUnit = perUnitMarketing(row.product_id);
+      const marketingUsed = Number(row.qty || 0) * mPerUnit;
+      const baseCost = Number(row.total_cost || 0);
+      const costNoMkt = baseCost - marketingUsed;
+      return { ...row, marketingUsed, costNoMkt };
+    });
+
+    const totalMarketingUsed = rowsWithComponents.reduce((s, r) => s + r.marketingUsed, 0);
+    const totalQty = rowsWithComponents.reduce((s, r) => s + Number(r.qty || 0), 0);
+
+    const allocMarketing = (row) => {
+      if (totalMarketingUsed > 0) {
+        return (row.marketingUsed / totalMarketingUsed) * marketingCalc.marketingTotalFinal;
+      }
+      if (totalQty > 0) {
+        return (Number(row.qty || 0) / totalQty) * marketingCalc.marketingTotalFinal;
+      }
+      return 0;
+    };
+
+    const allocOpex = (row) => {
+      if (totalQty > 0) {
+        return (Number(row.qty || 0) / totalQty) * opexTotal;
+      }
+      return 0;
+    };
+
+    return rowsWithComponents.map((row) => {
+      const marketingShare = allocMarketing(row);
+      const opexShare = allocOpex(row);
+      const adjustedCost = row.costNoMkt + marketingShare + opexShare;
+      const baseProfit = Number(row.net_profit || 0);
+      const adjustedProfit = baseProfit + row.marketingUsed - marketingShare - opexShare;
+      return {
+        ...row,
+        adjustedCost,
+        adjustedProfit,
+      };
+    });
+  }, [baseRows, productMap, inputs, marketingCalc, opexTotal]);
 
   const productSummary = forecast?.product_summary || [];
   const sizeRows = forecast?.size_breakdown || [];
@@ -215,6 +282,37 @@ const ForecastPage = () => {
     const gross = forecast.product_summary.reduce((s, p) => s + (p.gross_revenue || 0), 0);
     const effective = forecast.product_summary.reduce((s, p) => s + (p.effective_revenue || 0), 0);
     return { gross, effective, delta: gross - effective };
+  }, [forecast]);
+
+  const pulseData = React.useMemo(() => {
+    if (!forecast?.monthly || !forecast.monthly.length) return [];
+    const map = {};
+    forecast.monthly.forEach((r) => {
+      if (!map[r.month]) {
+        map[r.month] = {
+          month: r.month,
+          month_nice: r.month_nice || niceMonth(r.month),
+          revenue: 0,
+          profit: 0,
+          qty: 0,
+        };
+      }
+      map[r.month].revenue += Number(r.effective_revenue || 0);
+      map[r.month].profit += Number(r.net_profit || 0);
+      map[r.month].qty += Number(r.qty || 0);
+    });
+    const arr = Object.values(map);
+    const totalAll = arr.reduce(
+      (acc, m) => ({
+        month: "campaign",
+        month_nice: "Full Campaign",
+        revenue: acc.revenue + m.revenue,
+        profit: acc.profit + m.profit,
+        qty: acc.qty + m.qty,
+      }),
+      { month: "campaign", month_nice: "Full Campaign", revenue: 0, profit: 0, qty: 0 }
+    );
+    return [totalAll, ...arr];
   }, [forecast]);
 
   return (
@@ -291,29 +389,32 @@ const ForecastPage = () => {
                 <th className="py-2 pr-3">Product</th>
                 <th className="py-2 pr-3">Qty</th>
                 <th className="py-2 pr-3">Gross Rev</th>
+                <th className="py-2 pr-3">Effective Rev (promo/discount/returns)</th>
                 <th className="py-2 pr-3">Total Cost</th>
                 <th className="py-2 pr-3">Net Profit</th>
                 <th className="py-2 pr-3">Net Margin</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {monthlyRows.map((row) => {
-                const margin = row.effective_revenue
-                  ? (row.net_profit / row.effective_revenue) * 100
-                  : 0;
+              {displayRows.map((row) => {
+                const effRev = Number(row.effective_revenue ?? row.gross_revenue ?? 0);
+                const cost = Number(row.adjustedCost ?? row.total_cost ?? 0);
+                const profit = Number(row.adjustedProfit ?? row.net_profit ?? 0);
+                const margin = effRev ? (profit / effRev) * 100 : 0;
                 return (
                   <tr key={`${row.month}-${row.product_id}`}>
                     <td className="py-2 pr-3 text-muted">{row.month_nice || niceMonth(row.month)}</td>
                     <td className="py-2 pr-3">{row.product_name}</td>
                     <td className="py-2 pr-3">{Math.round(row.qty)}</td>
                     <td className="py-2 pr-3">{fmt(row.gross_revenue, currency)}</td>
-                    <td className="py-2 pr-3">{fmt(row.total_cost, currency)}</td>
-                    <td className="py-2 pr-3">{fmt(row.net_profit, currency)}</td>
+                    <td className="py-2 pr-3">{fmt(row.effective_revenue, currency)}</td>
+                    <td className="py-2 pr-3">{fmt(cost, currency)}</td>
+                    <td className="py-2 pr-3">{fmt(profit, currency)}</td>
                     <td className="py-2 pr-3">{pct(margin)}</td>
                   </tr>
                 );
               })}
-              {!monthlyRows.length && (
+              {!displayRows.length && (
                 <tr>
                   <td className="py-3 text-muted" colSpan={8}>
                     No forecast data yet.
@@ -428,29 +529,40 @@ const ForecastPage = () => {
 
       <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-4">
         <div className="text-lg font-semibold text-text">Visual Pulse</div>
+        <div className="text-sm text-muted">Revenue, profit, margin, and volume at a glance.</div>
         <div className="space-y-3">
-          {(monthlyOptions.length ? monthlyOptions : [{ value: "all", label: "All" }]).map((m) => {
-            const rows =
-              m.value === "all"
-                ? forecast?.monthly || []
-                : (forecast?.monthly || []).filter((r) => r.month === m.value);
-            const revenue = rows.reduce((s, r) => s + (r.effective_revenue || 0), 0);
-            const profit = rows.reduce((s, r) => s + (r.net_profit || 0), 0);
-            const barPct = revenue > 0 ? Math.min(100, Math.max(0, (profit / revenue) * 100 + 50)) : 50;
+          {pulseData.map((m) => {
+            const margin = m.revenue ? (m.profit / m.revenue) * 100 : 0;
+            const profitBar = m.revenue ? Math.min(100, Math.max(0, (m.profit / m.revenue) * 100 + 50)) : 50;
             return (
-              <div key={m.value} className="border border-border/60 rounded-lg p-4 bg-surface space-y-2">
+              <div key={m.month} className="border border-border/60 rounded-lg p-4 bg-surface space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm text-muted">{m.label}</div>
-                  <div className="text-xs text-muted">Revenue vs Profit</div>
+                  <div className="text-sm text-muted">{m.month_nice}</div>
+                  <div className="text-xs text-muted">Qty {Math.round(m.qty)}</div>
                 </div>
-                <div className="text-base font-semibold text-text">{fmt(revenue, currency)} revenue</div>
-                <div className="text-sm text-muted">Profit {fmt(profit, currency)}</div>
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex flex-col">
+                    <span className="text-muted">Revenue</span>
+                    <span className="font-semibold text-text">{fmt(m.revenue, currency)}</span>
+                  </div>
+                  <div className="flex flex-col text-right">
+                    <span className="text-muted">Profit</span>
+                    <span className="font-semibold text-text">{fmt(m.profit, currency)}</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted">
+                  <span>Margin</span>
+                  <span className="font-semibold text-text">{pct(margin)}</span>
+                </div>
                 <div className="h-2 rounded-full bg-border/60 overflow-hidden">
-                  <div className="h-full bg-emerald-400/80" style={{ width: `${barPct}%` }} />
+                  <div className="h-full bg-emerald-400/80" style={{ width: `${profitBar}%` }} />
                 </div>
               </div>
             );
           })}
+          {!pulseData.length && (
+            <div className="text-sm text-muted">No forecast data available.</div>
+          )}
         </div>
       </div>
     </div>
