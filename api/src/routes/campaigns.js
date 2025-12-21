@@ -631,8 +631,48 @@ router.get('/:id/forecast', requireAuth, async (req, res, next) => {
       .eq('is_active', true);
     if (pErr) throw pErr;
 
+    // apply per-campaign overrides (packaging, marketing, discount, return)
+    const { data: overrideRows, error: ovErr } = await supabase
+      .from('campaign_product_overrides')
+      .select('*')
+      .eq('campaign_id', campaignId);
+    if (ovErr) throw ovErr;
+    const overrideMap = (overrideRows || []).reduce((acc, row) => {
+      acc[row.product_id] = {
+        packaging_cost_bdt:
+          row.packaging_cost_bdt === null || row.packaging_cost_bdt === undefined
+            ? undefined
+            : Number(row.packaging_cost_bdt),
+        marketing_cost_bdt:
+          row.marketing_cost_bdt === null || row.marketing_cost_bdt === undefined
+            ? undefined
+            : Number(row.marketing_cost_bdt),
+        discount_rate:
+          row.discount_rate === null || row.discount_rate === undefined
+            ? undefined
+            : Number(row.discount_rate),
+        return_rate:
+          row.return_rate === null || row.return_rate === undefined
+            ? undefined
+            : Number(row.return_rate),
+      };
+      return acc;
+    }, {});
+
+    const mergedProducts = (prodRows || []).map((p) => {
+      const ov = overrideMap[p.id];
+      if (!ov) return p;
+      return {
+        ...p,
+        packaging_cost_bdt: ov.packaging_cost_bdt !== undefined ? ov.packaging_cost_bdt : p.packaging_cost_bdt,
+        marketing_cost_bdt: ov.marketing_cost_bdt !== undefined ? ov.marketing_cost_bdt : p.marketing_cost_bdt,
+        discount_rate: ov.discount_rate !== undefined ? ov.discount_rate : p.discount_rate,
+        return_rate: ov.return_rate !== undefined ? ov.return_rate : p.return_rate,
+      };
+    });
+
     const forecast = buildCampaignForecast({
-      products: prodRows || [],
+      products: mergedProducts || [],
       quantities,
       startDate: campaign.start_date,
       endDate: campaign.end_date,

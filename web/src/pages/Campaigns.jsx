@@ -720,7 +720,7 @@ const CampaignsPage = () => {
                           {item?.category || "N/A"} - {item?.cost_bdt ? `${item.cost_bdt} ${currency}` : "Cost N/A"}
                         </div>
                         <div className="text-xs text-muted">
-                          {item?.start_month || "n/a"} -> {item?.end_month || "ongoing"}
+                          {item?.start_month || "n/a"} {"→"} {item?.end_month || "ongoing"}
                         </div>
                         {!item && <span className="text-xs text-muted">missing id: {id}</span>}
                       </div>
@@ -850,10 +850,10 @@ const CampaignsPage = () => {
                         <div>
                           <div className="font-semibold">{o.name}</div>
                           <div className="text-xs text-muted">
-                            {o.category} � {o.cost_bdt} {currency}
+                            {o.category} � {o.cost_bdt} {currency}
                           </div>
                           <div className="text-xs text-muted">
-                            {o.start_month || "n/a"} -> {o.end_month || "ongoing"}
+                            {o.start_month || "n/a"} {"→"} {o.end_month || "ongoing"}
                           </div>
                         </div>
                         <button
@@ -886,7 +886,7 @@ const CampaignsPage = () => {
                             {item?.category || "N/A"} - {item?.cost_bdt ? `${item.cost_bdt} ${currency}` : "Cost N/A"}
                           </div>
                           <div className="text-xs text-muted">
-                            {item?.start_month || "n/a"} -> {item?.end_month || "ongoing"}
+                            {item?.start_month || "n/a"} {"→"} {item?.end_month || "ongoing"}
                           </div>
                           {!item && <div className="text-xs text-muted">missing id: {id}</div>}
                         </div>
