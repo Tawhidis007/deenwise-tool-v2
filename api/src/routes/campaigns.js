@@ -64,7 +64,8 @@ router.post('/', requireAuth, async (req, res, next) => {
       name: body.name,
       start_date: body.start_date,
       end_date: body.end_date,
-      distribution_mode: body.distribution_mode || 'Uniform',
+      distribution_mode: 'Custom',
+      enable_size_breakdown: true,
       currency: body.currency || 'BDT',
       created_at: nowIso(),
       updated_at: nowIso(),
@@ -98,9 +99,11 @@ router.put('/:id', requireAuth, async (req, res, next) => {
       updated_at: nowIso(),
     };
 
-    ['name', 'start_date', 'end_date', 'distribution_mode', 'currency'].forEach((field) => {
+    ['name', 'start_date', 'end_date', 'currency'].forEach((field) => {
       if (field in body) payload[field] = body[field];
     });
+    payload.distribution_mode = 'Custom';
+    payload.enable_size_breakdown = true;
 
     const { data, error } = await supabase
       .from('campaigns')
@@ -169,13 +172,221 @@ router.get('/:id/inputs', requireAuth, async (req, res, next) => {
       size_breakdown[r.product_id][r.size] = Number(r.qty || 0);
     });
 
+    const { data: opexRows, error: opexErr } = await supabase
+      .from('campaign_opex')
+      .select('opex_id')
+      .eq('campaign_id', campaignId);
+    if (opexErr) throw opexErr;
+    const opex_ids = (opexRows || []).map((r) => r.opex_id);
+
+    let attached_opex = [];
+    if (opex_ids.length) {
+      const { data: opexItems, error: opexItemsErr } = await supabase
+        .from('opex_items')
+        .select('*')
+        .in('id', opex_ids);
+      if (opexItemsErr) throw opexItemsErr;
+      attached_opex = opexItems || [];
+    }
+
+    const { data: overrideRows, error: ovErr } = await supabase
+      .from('campaign_product_overrides')
+      .select('*')
+      .eq('campaign_id', campaignId);
+    if (ovErr) throw ovErr;
+    const product_overrides = {};
+    (overrideRows || []).forEach((r) => {
+      product_overrides[r.product_id] = {
+        packaging_cost_bdt: r.packaging_cost_bdt !== null ? Number(r.packaging_cost_bdt) : null,
+        marketing_cost_bdt: r.marketing_cost_bdt !== null ? Number(r.marketing_cost_bdt) : null,
+        discount_rate: r.discount_rate !== null ? Number(r.discount_rate) : null,
+        return_rate: r.return_rate !== null ? Number(r.return_rate) : null,
+      };
+    });
+
+    const { data: marketingRow, error: marketingErr } = await supabase
+      .from('campaign_marketing_totals')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .maybeSingle();
+    if (marketingErr && marketingErr.code !== 'PGRST116') throw marketingErr;
+    const marketing_total =
+      marketingRow && marketingRow.marketing_cost_total_bdt !== null
+        ? Number(marketingRow.marketing_cost_total_bdt)
+        : null;
+
     return res.json({
-      campaign: pickCampaign(campaign),
+      campaign: { ...pickCampaign(campaign), opex_ids, attached_opex, marketing_total },
       quantities,
       month_weights,
       product_month_weights,
       size_breakdown,
+      product_overrides,
     });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// PUT /campaigns/:id/product-overrides
+router.put('/:id/product-overrides', requireAuth, async (req, res, next) => {
+  try {
+    const campaignId = req.params.id;
+    const overrides = req.body?.overrides;
+    if (!isObject(overrides)) {
+      return res.status(400).json({ error: 'Invalid overrides' });
+    }
+
+    const rows = Object.entries(overrides).reduce((acc, [product_id, vals]) => {
+      if (!isObject(vals)) return acc;
+      const packaging_cost_bdt = vals.packaging_cost_bdt ?? null;
+      const marketing_cost_bdt = vals.marketing_cost_bdt ?? null;
+      const discount_rate = vals.discount_rate ?? null;
+      const return_rate = vals.return_rate ?? null;
+
+      const hasValue =
+        packaging_cost_bdt !== null ||
+        marketing_cost_bdt !== null ||
+        discount_rate !== null ||
+        return_rate !== null;
+      if (!hasValue) return acc;
+
+      acc.push({
+        campaign_id: campaignId,
+        product_id,
+        packaging_cost_bdt: packaging_cost_bdt === null ? null : Number(packaging_cost_bdt),
+        marketing_cost_bdt: marketing_cost_bdt === null ? null : Number(marketing_cost_bdt),
+        discount_rate: discount_rate === null ? null : Number(discount_rate),
+        return_rate: return_rate === null ? null : Number(return_rate),
+        updated_at: nowIso(),
+      });
+      return acc;
+    }, []);
+
+    const { error: delErr } = await supabase
+      .from('campaign_product_overrides')
+      .delete()
+      .eq('campaign_id', campaignId);
+    if (delErr) throw delErr;
+
+    if (rows.length) {
+      const { error: insErr } = await supabase.from('campaign_product_overrides').insert(rows);
+      if (insErr) throw insErr;
+    }
+
+    return res.json({ saved: true, count: rows.length });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// PUT /campaigns/:id/marketing-total
+router.put('/:id/marketing-total', requireAuth, async (req, res, next) => {
+  try {
+    const campaignId = req.params.id;
+    const raw = req.body?.marketing_cost_total_bdt;
+    const value = raw === null || raw === undefined || raw === '' ? null : Number(raw);
+    if (value !== null && Number.isNaN(value)) {
+      return res.status(400).json({ error: 'Invalid marketing_cost_total_bdt' });
+    }
+
+    if (value === null) {
+      const { error: delErr } = await supabase
+        .from('campaign_marketing_totals')
+        .delete()
+        .eq('campaign_id', campaignId);
+      if (delErr) throw delErr;
+      return res.json({ saved: true, marketing_cost_total_bdt: null });
+    }
+
+    const { error } = await supabase
+      .from('campaign_marketing_totals')
+      .upsert({
+        campaign_id: campaignId,
+        marketing_cost_total_bdt: value,
+        updated_at: nowIso(),
+      })
+      .eq('campaign_id', campaignId);
+    if (error) throw error;
+
+    return res.json({ saved: true, marketing_cost_total_bdt: value });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// PUT /campaigns/:id/opex
+router.put('/:id/opex', requireAuth, async (req, res, next) => {
+  try {
+    const campaignId = req.params.id;
+    const opexIds = Array.isArray(req.body?.opexIds) ? req.body.opexIds.filter(Boolean) : null;
+    if (!opexIds) {
+      return res.status(400).json({ error: 'Invalid opexIds' });
+    }
+
+    const rows = opexIds.map((oid) => ({
+      campaign_id: campaignId,
+      opex_id: oid,
+      updated_at: nowIso(),
+    }));
+
+    const { error: delErr } = await supabase.from('campaign_opex').delete().eq('campaign_id', campaignId);
+    if (delErr) throw delErr;
+
+    if (rows.length) {
+      const { error: insErr } = await supabase.from('campaign_opex').insert(rows);
+      if (insErr) throw insErr;
+    }
+
+    return res.json({ saved: true, count: rows.length });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// DELETE /campaigns/:id
+router.delete('/:id', requireAuth, async (req, res, next) => {
+  const safeDelete = async (table, col = 'campaign_id', val) => {
+    const target = val ?? req.params.id;
+    try {
+      const { error } = await supabase.from(table).delete().eq(col, target);
+      if (error && !['PGRST204', '42P01', 'PGRST116'].includes(error.code)) throw error;
+    } catch (err) {
+      // if table does not exist or view missing, ignore; otherwise propagate
+      if (!['PGRST204', '42P01', 'PGRST116'].includes(err.code)) {
+        throw err;
+      }
+    }
+  };
+
+  try {
+    const campaignId = req.params.id;
+
+    const { data: existing, error: findErr } = await supabase
+      .from('campaigns')
+      .select('id')
+      .eq('id', campaignId)
+      .single();
+    if (findErr || !existing) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    const tables = [
+      'campaign_quantities',
+      'campaign_month_weights',
+      'campaign_size_breakdown',
+      'campaign_opex',
+      'scenario_campaign_links',
+    ];
+
+    for (const table of tables) {
+      await safeDelete(table);
+    }
+
+    const { error: delCampaignErr } = await supabase.from('campaigns').delete().eq('id', campaignId);
+    if (delCampaignErr) throw delCampaignErr;
+
+    return res.json({ deleted: true, id: campaignId });
   } catch (err) {
     return next(err);
   }

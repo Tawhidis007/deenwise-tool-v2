@@ -5,6 +5,7 @@ import AuthGuard from "../components/AuthGuard";
 import DashboardPage from "../pages/Dashboard";
 import LoginPage from "../pages/Login";
 import ProductsPage from "../pages/Products";
+import CampaignsPage from "../pages/Campaigns";
 import ForecastPage from "../pages/Forecast";
 import OpexPage from "../pages/Opex";
 import ScenarioPage from "../pages/Scenario";
@@ -20,13 +21,14 @@ const App = () => {
         <Route element={<Shell />}>
           <Route index element={<DashboardPage />} />
           <Route path="/products" element={<ProductsPage />} />
+          <Route path="/campaigns" element={<CampaignsPage />} />
           <Route path="/forecast" element={<ForecastPage />} />
           <Route path="/opex" element={<OpexPage />} />
           <Route path="/scenarios" element={<ScenarioPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           {routes
-            .filter((r) => !["/products", "/forecast", "/opex", "/scenarios", "/settings", "/reports"].includes(r.path))
+            .filter((r) => !["/products", "/campaigns", "/forecast", "/opex", "/scenarios", "/settings", "/reports"].includes(r.path))
             .map((route) => (
               <Route
                 key={route.path}

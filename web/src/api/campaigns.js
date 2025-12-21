@@ -40,9 +40,29 @@ export const saveSizeBreakdown = async ({ id, sizes }) => {
   return data;
 };
 
+export const saveCampaignOverrides = async ({ id, overrides }) => {
+  const { data } = await api.put(`/campaigns/${id}/product-overrides`, { overrides });
+  return data;
+};
+
+export const saveMarketingTotal = async ({ id, marketing_cost_total_bdt }) => {
+  const { data } = await api.put(`/campaigns/${id}/marketing-total`, { marketing_cost_total_bdt });
+  return data;
+};
+
+export const saveCampaignOpex = async ({ campaignId, opexIds }) => {
+  const { data } = await api.put(`/campaigns/${campaignId}/opex`, { opexIds });
+  return data;
+};
+
 export const fetchCampaignForecast = async (id) => {
   const { data } = await api.get(`/campaigns/${id}/forecast`, {
     params: { includeSizes: true },
   });
+  return data;
+};
+
+export const deleteCampaign = async (id) => {
+  const { data } = await api.delete(`/campaigns/${id}`);
   return data;
 };

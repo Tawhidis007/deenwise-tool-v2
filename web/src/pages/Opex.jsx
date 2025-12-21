@@ -8,6 +8,7 @@ import {
   deleteOpex,
   saveCampaignOpex,
   fetchCampaignProfitability,
+  fetchCampaignOpex,
 } from "../api/opex";
 import { useCurrency } from "../hooks/useCurrency";
 
@@ -32,8 +33,17 @@ const OpexPage = () => {
   const [selectedOpexLinks, setSelectedOpexLinks] = React.useState([]);
   const [statusMsg, setStatusMsg] = React.useState("");
 
-  const { data: campaigns = [] } = useQuery({ queryKey: ["campaigns"], queryFn: fetchCampaigns });
-  const { data: opexItems = [] } = useQuery({ queryKey: ["opex"], queryFn: fetchOpex });
+  const { data: campaigns = [] } = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: fetchCampaigns,
+    staleTime: 5 * 60 * 1000,
+  });
+  const { data: opexItems = [] } = useQuery({
+    queryKey: ["opex"],
+    queryFn: () => fetchOpex({ active: false }),
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+  });
 
   React.useEffect(() => {
     if (!selectedCampaignId && campaigns.length) {
@@ -46,6 +56,18 @@ const OpexPage = () => {
     queryFn: () => fetchCampaignProfitability(selectedCampaignId),
     enabled: Boolean(selectedCampaignId),
   });
+
+  const campaignOpexQuery = useQuery({
+    queryKey: ["campaignOpex", selectedCampaignId],
+    queryFn: () => fetchCampaignOpex(selectedCampaignId),
+    enabled: Boolean(selectedCampaignId),
+  });
+
+  React.useEffect(() => {
+    if (campaignOpexQuery.data?.ids) {
+      setSelectedOpexLinks(campaignOpexQuery.data.ids);
+    }
+  }, [campaignOpexQuery.data]);
 
   React.useEffect(() => {
     if (!selectedOpexId && opexItems.length) {
@@ -82,7 +104,10 @@ const OpexPage = () => {
 
   const saveLinksMut = useMutation({
     mutationFn: () => saveCampaignOpex({ campaignId: selectedCampaignId, opexIds: selectedOpexLinks }),
-    onSuccess: () => setStatusMsg("Campaign OPEX selection saved."),
+    onSuccess: () => {
+      setStatusMsg("Campaign OPEX selection saved.");
+      queryClient.invalidateQueries({ queryKey: ["campaignOpex", selectedCampaignId] });
+    },
   });
 
   const validate = (body) => {

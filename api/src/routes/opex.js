@@ -58,24 +58,12 @@ const pickOpex = (row = {}) =>
   }, {});
 
 // GET /opex
-router.get('/', requireAuth, async (req, res, next) => {
+router.get('/opex', requireAuth, async (req, res, next) => {
   try {
-    const activeParam = parseBool(req.query.active);
-    let query = supabase.from('opex_items').select('*').order('created_at', { ascending: false });
-
-    let data;
-    let error;
-    if (activeParam === false) {
-      ({ data, error } = await query);
-    } else {
-      ({ data, error } = await query.eq('is_active', true));
-      if (error && /is_active/.test(error.message || '')) {
-        ({ data, error } = await supabase
-          .from('opex_items')
-          .select('*')
-          .order('created_at', { ascending: false }));
-      }
-    }
+    let { data, error } = await supabase
+      .from('opex_items')
+      .select('*')
+      .order('created_at', { ascending: false });
     if (error) throw error;
 
     return res.json({ items: (data || []).map(pickOpex) });
@@ -85,7 +73,7 @@ router.get('/', requireAuth, async (req, res, next) => {
 });
 
 // POST /opex
-router.post('/', requireAuth, async (req, res, next) => {
+router.post('/opex', requireAuth, async (req, res, next) => {
   try {
     const body = req.body || {};
     const errors = validateOpex(body);
@@ -113,7 +101,7 @@ router.post('/', requireAuth, async (req, res, next) => {
 });
 
 // PUT /opex/:id
-router.put('/:id', requireAuth, async (req, res, next) => {
+router.put('/opex/:id', requireAuth, async (req, res, next) => {
   try {
     const opexId = req.params.id;
     const body = req.body || {};
@@ -150,7 +138,7 @@ router.put('/:id', requireAuth, async (req, res, next) => {
 });
 
 // DELETE /opex/:id
-router.delete('/:id', requireAuth, async (req, res, next) => {
+router.delete('/opex/:id', requireAuth, async (req, res, next) => {
   try {
     const opexId = req.params.id;
     const { data: existing, error: findErr } = await supabase
@@ -191,6 +179,33 @@ router.put('/campaigns/:id/opex', requireAuth, async (req, res, next) => {
     }
 
     return res.json({ saved: true });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// GET /campaigns/:id/opex
+router.get('/campaigns/:id/opex', requireAuth, async (req, res, next) => {
+  try {
+    const campaignId = req.params.id;
+    const { data: links, error } = await supabase
+      .from('campaign_opex')
+      .select('opex_id')
+      .eq('campaign_id', campaignId);
+    if (error) throw error;
+    const ids = (links || []).map((r) => r.opex_id);
+
+    let items = [];
+    if (ids.length) {
+      const { data: opexItems, error: itemsErr } = await supabase
+        .from('opex_items')
+        .select('*')
+        .in('id', ids);
+      if (itemsErr) throw itemsErr;
+      items = (opexItems || []).map(pickOpex);
+    }
+
+    return res.json({ ids, items });
   } catch (err) {
     return next(err);
   }

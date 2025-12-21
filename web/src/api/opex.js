@@ -1,6 +1,6 @@
 import { api } from "./client";
 
-export const fetchOpex = async (params = {}) => {
+export const fetchOpex = async (params = { active: false }) => {
   const { data } = await api.get("/opex", { params });
   return data.items || [];
 };
@@ -22,6 +22,11 @@ export const deleteOpex = async (id) => {
 
 export const saveCampaignOpex = async ({ campaignId, opexIds }) => {
   const { data } = await api.put(`/campaigns/${campaignId}/opex`, { opex_ids: opexIds });
+  return data;
+};
+
+export const fetchCampaignOpex = async (campaignId) => {
+  const { data } = await api.get(`/campaigns/${campaignId}/opex`);
   return data;
 };
 
