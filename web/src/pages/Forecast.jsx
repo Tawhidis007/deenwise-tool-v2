@@ -1,6 +1,16 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  LabelList,
+} from "recharts";
+import {
   fetchCampaigns,
   fetchCampaignInputs,
   fetchCampaignForecast,
@@ -41,6 +51,17 @@ const pct = (val) => {
   return `${Number(val).toFixed(1)}%`;
 };
 
+const niceTickStep = (maxValue, ticks = 5) => {
+  if (maxValue <= 0) return 1;
+  const rough = maxValue / (ticks - 1);
+  const pow10 = Math.pow(10, Math.floor(Math.log10(rough)));
+  const digit = rough / pow10;
+  let step = pow10;
+  if (digit >= 5) step = 5 * pow10;
+  else if (digit >= 2) step = 2 * pow10;
+  return step;
+};
+
 const polarToCartesian = (cx, cy, r, angleDeg) => {
   const rad = ((angleDeg - 90) * Math.PI) / 180.0;
   return {
@@ -71,9 +92,49 @@ const describeDonutSlice = (cx, cy, r, ir, startAngle, endAngle) => {
   ].join(" ");
 };
 
-const Card = ({ title, value, subtitle }) => (
+const InfoTooltip = ({ text }) => {
+  const [open, setOpen] = React.useState(false);
+  const timerRef = React.useRef(null);
+
+  const show = () => {
+    setOpen(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setOpen(false), 4000);
+  };
+
+  const hide = () => {
+    setOpen(false);
+    if (timerRef.current) clearTimeout(timerRef.current);
+  };
+
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        className="ml-2 h-5 w-5 rounded-full border border-border/70 text-[10px] font-semibold text-muted hover:text-text"
+        aria-label="More info"
+        onMouseEnter={show}
+        onMouseLeave={hide}
+        onFocus={show}
+        onBlur={hide}
+      >
+        i
+      </button>
+      {open && (
+        <span className="absolute right-0 top-6 z-10 w-52 rounded-md border border-border/70 bg-surface px-2 py-1 text-[11px] text-muted shadow-md">
+          {text}
+        </span>
+      )}
+    </span>
+  );
+};
+
+const Card = ({ title, value, subtitle, help }) => (
   <div className="bg-card border border-border/60 rounded-xl p-4 flex h-full flex-col gap-2 shadow-sm">
-    <div className="text-sm text-muted leading-snug whitespace-normal break-words">{title}</div>
+    <div className="flex items-start justify-between gap-2">
+      <div className="text-sm text-muted leading-snug whitespace-normal break-words">{title}</div>
+      {help && <InfoTooltip text={help} />}
+    </div>
     <div className="text-2xl font-semibold text-text whitespace-nowrap">{value}</div>
     {subtitle && <div className="text-xs text-muted">{subtitle}</div>}
   </div>
@@ -90,6 +151,7 @@ const ForecastPage = () => {
   const [showSizeDefs, setShowSizeDefs] = React.useState(false);
   const [showUnitDefs, setShowUnitDefs] = React.useState(false);
   const [showImpactDefs, setShowImpactDefs] = React.useState(false);
+  const [showForecastChart, setShowForecastChart] = React.useState(true);
 
   const { data: campaigns = [] } = useQuery({
     queryKey: ["campaigns"],
@@ -619,6 +681,36 @@ const ForecastPage = () => {
     return pulseData.filter((m) => m.month === pulseFilter);
   }, [pulseData, pulseFilter]);
 
+  const productBarData = React.useMemo(() => {
+    if (!displayRows.length) return [];
+    const aggregates = displayRows.reduce((acc, row) => {
+      const key = row.product_id;
+      if (!acc[key]) {
+        acc[key] = {
+          product_id: row.product_id,
+          product_name: row.product_name,
+          gross: 0,
+          effective: 0,
+          totalCost: 0,
+        };
+      }
+      acc[key].gross += Number(row.gross_revenue || 0);
+      acc[key].effective += Number(row.effective_revenue || 0);
+      acc[key].totalCost += Number(row.adjustedCost ?? row.total_cost ?? 0);
+      return acc;
+    }, {});
+    return Object.values(aggregates);
+  }, [displayRows]);
+
+  const productBarDomain = React.useMemo(() => {
+    if (!productBarData.length) return { max: 0, ticks: [0] };
+    const maxGross = productBarData.reduce((max, row) => Math.max(max, row.gross), 0);
+    const step = niceTickStep(maxGross || 1, 5);
+    const max = maxGross > 0 ? Math.ceil(maxGross / step) * step : 0;
+    const ticks = Array.from({ length: Math.floor(max / step) + 1 }, (_, i) => i * step);
+    return { max, ticks: ticks.length ? ticks : [0] };
+  }, [productBarData]);
+
   const allocationSlices = React.useMemo(() => {
     const segments = revenueAllocation.segments;
     const totalPct = segments.reduce((sum, seg) => sum + Math.max(0, seg.pct), 0) || 1;
@@ -667,9 +759,21 @@ const ForecastPage = () => {
           <div className="text-sm text-muted">Read-only analytics for planned campaigns</div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 [@media(min-width:1200px)]:grid-cols-4 auto-rows-fr gap-4">
-          <Card title="Product Units" value={productUnits} />
-          <Card title="Gross Revenue" value={fmt(grossRevenue, currency)} />
-          <Card title="Effective Revenue (after discounts & returns)" value={fmt(effectiveRevenue, currency)} />
+          <Card
+            title="Product Units"
+            value={productUnits}
+            help="Total units planned across all products for the campaign."
+          />
+          <Card
+            title="Gross Revenue"
+            value={fmt(grossRevenue, currency)}
+            help="Sales before discounts and returns."
+          />
+          <Card
+            title="Effective Revenue (after discounts & returns)"
+            value={fmt(effectiveRevenue, currency)}
+            help="Sales after discounts and returns."
+          />
           <Card
             title="Revenue Leakage Rate"
             value={
@@ -682,9 +786,14 @@ const ForecastPage = () => {
                 "--"
               )
             }
+            help="Share of gross revenue lost to discounts and returns."
           />
-          <Card title="Total Cost (incl. Marketing, OPEX, Packaging)" value={fmt(totalCost, currency)} />
-          <Card title="Net Profit" value={fmt(netProfit, currency)} />
+          <Card
+            title="Total Cost (incl. Marketing, OPEX, Packaging)"
+            value={fmt(totalCost, currency)}
+            help="All costs including factory, marketing, and OPEX."
+          />
+          <Card title="Net Profit" value={fmt(netProfit, currency)} help="Effective revenue minus total cost." />
           <Card
             title="Net Margin"
             value={
@@ -697,6 +806,7 @@ const ForecastPage = () => {
                 "--"
               )
             }
+            help="Net profit as a share of effective revenue."
           />
           <Card
             title="Marketing Efficiency Ratio"
@@ -710,6 +820,7 @@ const ForecastPage = () => {
                 "--"
               )
             }
+            help="Effective revenue earned per 1 unit of marketing cost."
           />
         </div>
       </div>
@@ -813,6 +924,89 @@ const ForecastPage = () => {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="pt-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-base font-semibold text-text">Revenue vs Cost by Product</div>
+            <button
+              type="button"
+              className="text-xs text-muted border border-border/60 rounded-md px-2 py-1 bg-card hover:bg-border/40"
+              onClick={() => setShowForecastChart((prev) => !prev)}
+            >
+              {showForecastChart ? "Collapse" : "Expand"}
+            </button>
+          </div>
+          <div className="text-sm text-muted max-w-xl">
+            Gross revenue, effective revenue, and total cost comparison
+          </div>
+          {showForecastChart && (
+            <>
+              <div className="flex flex-wrap items-center gap-4 text-xs text-muted">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-sm bg-sky-300" />
+                  <span>Gross Revenue</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-sm bg-emerald-400" />
+                  <span>Effective Revenue</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-sm bg-amber-500" />
+                  <span>Total Cost</span>
+                </div>
+              </div>
+              <div className="border border-border/60 rounded-lg p-4 bg-surface">
+                {productBarData.length ? (
+                  <div className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={productBarData}
+                        margin={{ top: 28, right: 16, left: 8, bottom: 32 }}
+                        barCategoryGap="12%"
+                        barGap={4}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                        <XAxis
+                          dataKey="product_name"
+                          tick={{ fill: "rgba(148,163,184,0.9)", fontSize: 11 }}
+                          axisLine={{ stroke: "rgba(148,163,184,0.5)" }}
+                          tickLine={{ stroke: "rgba(148,163,184,0.5)" }}
+                          interval={0}
+                          tickMargin={8}
+                        />
+                        <YAxis
+                          domain={[0, productBarDomain.max]}
+                          ticks={productBarDomain.ticks}
+                          tickFormatter={(val) => fmt(val, currency)}
+                          tick={{ fill: "rgba(148,163,184,0.9)", fontSize: 11 }}
+                          axisLine={{ stroke: "rgba(148,163,184,0.5)" }}
+                          tickLine={{ stroke: "rgba(148,163,184,0.5)" }}
+                          width={72}
+                        />
+                        <Tooltip
+                          formatter={(val, name) => [fmt(val, currency), name]}
+                          contentStyle={{ background: "var(--surface)", borderColor: "rgba(148,163,184,0.4)" }}
+                          shared={false}
+                          cursor={{ fill: "rgba(148,163,184,0.08)" }}
+                        />
+                        <Bar dataKey="gross" name="Gross Revenue" fill="#7dd3fc" barSize={22} maxBarSize={24}>
+                          <LabelList dataKey="gross" position="top" formatter={(val) => fmt(val, currency)} angle={-90} fill="rgba(148,163,184,0.9)" fontSize={9} offset={12} />
+                        </Bar>
+                        <Bar dataKey="effective" name="Effective Revenue" fill="#34d399" barSize={22} maxBarSize={24}>
+                          <LabelList dataKey="effective" position="top" formatter={(val) => fmt(val, currency)} angle={-90} fill="rgba(148,163,184,0.9)" fontSize={9} offset={12} />
+                        </Bar>
+                        <Bar dataKey="totalCost" name="Total Cost" fill="rgba(245,158,11,0.8)" barSize={22} maxBarSize={24}>
+                          <LabelList dataKey="totalCost" position="top" formatter={(val) => fmt(val, currency)} angle={-90} fill="rgba(148,163,184,0.9)" fontSize={9} offset={12} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted">No product data available.</div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
