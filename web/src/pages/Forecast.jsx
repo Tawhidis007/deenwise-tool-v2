@@ -55,7 +55,11 @@ const ForecastPage = () => {
   const [monthFilter, setMonthFilter] = React.useState("all");
   const [sizeProductFilter, setSizeProductFilter] = React.useState("all");
   const [impactFilter, setImpactFilter] = React.useState("all");
-  const [pulseFilter, setPulseFilter] = React.useState("all");
+  const [pulseFilter, setPulseFilter] = React.useState("campaign");
+  const [showForecastDefs, setShowForecastDefs] = React.useState(false);
+  const [showSizeDefs, setShowSizeDefs] = React.useState(false);
+  const [showUnitDefs, setShowUnitDefs] = React.useState(false);
+  const [showImpactDefs, setShowImpactDefs] = React.useState(false);
 
   const { data: campaigns = [] } = useQuery({
     queryKey: ["campaigns"],
@@ -261,8 +265,24 @@ const ForecastPage = () => {
     [productMap, inputs, marketingCalc, opexTotal]
   );
 
-  // Rebalance marketing and OPEX per row to match campaign-level adjustments
-  const displayRows = React.useMemo(() => buildAdjustedRows(baseRows), [baseRows, buildAdjustedRows]);
+  const campaignUnitCost = productUnits > 0 ? totalCost / productUnits : 0;
+
+  // Allocate campaign totals proportionally by quantity for monthly/product rows.
+  const displayRows = React.useMemo(
+    () =>
+      baseRows.map((row) => {
+        const qty = Number(row.qty || 0);
+        const adjustedCost = campaignUnitCost * qty;
+        const effRev = Number(row.effective_revenue ?? row.gross_revenue ?? 0);
+        const adjustedProfit = effRev - adjustedCost;
+        return {
+          ...row,
+          adjustedCost,
+          adjustedProfit,
+        };
+      }),
+    [baseRows, campaignUnitCost]
+  );
 
   const productSummary = forecast?.product_summary || [];
   const sizeRows = forecast?.size_breakdown || [];
@@ -592,6 +612,34 @@ const ForecastPage = () => {
             </select>
           </div>
         </div>
+        <div className="bg-surface border border-border/60 rounded-lg p-3 text-xs text-muted space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-text">Definitions</div>
+            <button
+              type="button"
+              className="text-xs text-muted border border-border/60 rounded-md px-2 py-1 bg-card hover:bg-border/40"
+              onClick={() => setShowForecastDefs((prev) => !prev)}
+            >
+              {showForecastDefs ? "Collapse" : "Expand"}
+            </button>
+          </div>
+          {showForecastDefs && (
+            <div className="space-y-2">
+              <div>
+                <span className="font-medium text-text">Effective Revenue</span> Revenue after discounts and returns.
+              </div>
+              <div>
+                <span className="font-medium text-text">Total Cost</span> Fully loaded cost allocated from campaign totals.
+              </div>
+              <div>
+                <span className="font-medium text-text">Net Profit</span> Effective Revenue minus Total Cost.
+              </div>
+              <div>
+                <span className="font-medium text-text">Net Margin</span> Net Profit as a percentage of Effective Revenue.
+              </div>
+            </div>
+          )}
+        </div>
         <div className="overflow-auto">
           <table className="min-w-full text-sm">
             <thead className="text-left text-muted border-b border-border/60">
@@ -658,24 +706,37 @@ const ForecastPage = () => {
           </div>
         </div>
         <div className="bg-surface border border-border/60 rounded-lg p-3 text-xs text-muted space-y-2">
-          <div className="text-sm font-semibold text-text">Cost Definitions</div>
-          <div>
-            <span className="font-medium text-text">Factory Cost</span> Direct cost of producing the item
-            (manufacturing + packaging). Excludes marketing and business overheads.
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-text">Definitions</div>
+            <button
+              type="button"
+              className="text-xs text-muted border border-border/60 rounded-md px-2 py-1 bg-card hover:bg-border/40"
+              onClick={() => setShowSizeDefs((prev) => !prev)}
+            >
+              {showSizeDefs ? "Collapse" : "Expand"}
+            </button>
           </div>
-          <div>
-            <span className="font-medium text-text">Total Cost (Fully Loaded)</span> Factory Cost plus allocated
-            marketing spend and operational overheads (OPEX). Represents the true cost to the business per unit.
-          </div>
-          <div>
-            <span className="font-medium text-text">Revenue</span> Effective revenue after discounts and returns.
-          </div>
-          <div>
-            <span className="font-medium text-text">Net Profit</span> Revenue minus Total Cost (Fully Loaded).
-          </div>
-          <div>
-            <span className="font-medium text-text">Net Margin</span> Net Profit as a percentage of Revenue.
-          </div>
+          {showSizeDefs && (
+            <div className="space-y-2">
+              <div>
+                <span className="font-medium text-text">Factory Cost</span> Direct cost of producing the item
+                (manufacturing + packaging). Excludes marketing and business overheads.
+              </div>
+              <div>
+                <span className="font-medium text-text">Total Cost (Fully Loaded)</span> Factory Cost plus allocated
+                marketing spend and operational overheads (OPEX). Represents the true cost to the business per unit.
+              </div>
+              <div>
+                <span className="font-medium text-text">Revenue</span> Effective revenue after discounts and returns.
+              </div>
+              <div>
+                <span className="font-medium text-text">Net Profit</span> Revenue minus Total Cost (Fully Loaded).
+              </div>
+              <div>
+                <span className="font-medium text-text">Net Margin</span> Net Profit as a percentage of Revenue.
+              </div>
+            </div>
+          )}
         </div>
         <div className="overflow-auto">
           <table className="min-w-full text-sm">
@@ -724,15 +785,28 @@ const ForecastPage = () => {
       <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-3">
         <div className="text-lg font-semibold text-text">Unit Breakdown</div>
         <div className="bg-surface border border-border/60 rounded-lg p-3 text-xs text-muted space-y-2">
-          <div className="text-sm font-semibold text-text">Unit Metric Definitions</div>
-          <div>
-            <span className="font-medium text-text">Factory Unit Cost</span> Direct cost to produce a single unit
-            (manufacturing + packaging). Excludes marketing and operational overheads.
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-text">Definitions</div>
+            <button
+              type="button"
+              className="text-xs text-muted border border-border/60 rounded-md px-2 py-1 bg-card hover:bg-border/40"
+              onClick={() => setShowUnitDefs((prev) => !prev)}
+            >
+              {showUnitDefs ? "Collapse" : "Expand"}
+            </button>
           </div>
-          <div>
-            <span className="font-medium text-text">Unit Cost (Fully Loaded)</span> Factory Unit Cost plus allocated
-            marketing spend and business overheads (OPEX). Represents the true average cost per unit to the business.
-          </div>
+          {showUnitDefs && (
+            <div className="space-y-2">
+              <div>
+                <span className="font-medium text-text">Factory Unit Cost</span> Direct cost to produce a single unit
+                (manufacturing + packaging). Excludes marketing and operational overheads.
+              </div>
+              <div>
+                <span className="font-medium text-text">Unit Cost (Fully Loaded)</span> Factory Unit Cost plus allocated
+                marketing spend and business overheads (OPEX). Represents the true average cost per unit to the business.
+              </div>
+            </div>
+          )}
         </div>
         <div className="overflow-auto">
           <table className="min-w-full text-sm">
@@ -786,15 +860,28 @@ const ForecastPage = () => {
           </div>
         </div>
         <div className="bg-surface border border-border/60 rounded-lg p-3 text-xs text-muted space-y-2">
-          <div className="text-sm font-semibold text-text">Revenue Impact Definitions</div>
-          <div>
-            <span className="font-medium text-text">Discount Impact</span> Revenue reduction due to promotional
-            discounts applied at point of sale.
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-text">Definitions</div>
+            <button
+              type="button"
+              className="text-xs text-muted border border-border/60 rounded-md px-2 py-1 bg-card hover:bg-border/40"
+              onClick={() => setShowImpactDefs((prev) => !prev)}
+            >
+              {showImpactDefs ? "Collapse" : "Expand"}
+            </button>
           </div>
-          <div>
-            <span className="font-medium text-text">Returns Impact</span> Expected revenue loss from returned units,
-            applied after discounts.
-          </div>
+          {showImpactDefs && (
+            <div className="space-y-2">
+              <div>
+                <span className="font-medium text-text">Discount Impact</span> Revenue reduction due to promotional
+                discounts applied at point of sale.
+              </div>
+              <div>
+                <span className="font-medium text-text">Returns Impact</span> Expected revenue loss from returned units,
+                applied after discounts.
+              </div>
+            </div>
+          )}
         </div>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
