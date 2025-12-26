@@ -634,30 +634,37 @@ const ForecastPage = () => {
 
   return (
     <div className="p-6 space-y-6">
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-wide text-accent">FINANCIAL SUMMARY</p>
+          <div className="text-3xl font-semibold text-text">Campaign Performance Overview</div>
+          <p className="text-sm text-muted">
+            Executive-level view of revenue, costs, profit, and efficiency metrics.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-muted">Campaign</label>
+          <select
+            className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text"
+            value={selectedCampaign?.id || ""}
+            onChange={(e) => {
+              const next = campaigns.find((c) => c.id === e.target.value);
+              setSelectedCampaign(next || null);
+              setMonthFilter("all");
+            }}
+          >
+            {campaigns.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
       <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-3">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <div className="text-lg font-semibold text-text">Overall Forecast</div>
-            <div className="text-sm text-muted">Read-only analytics for planned campaigns</div>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="text-xs text-muted">Campaign</label>
-            <select
-              className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text"
-              value={selectedCampaign?.id || ""}
-              onChange={(e) => {
-                const next = campaigns.find((c) => c.id === e.target.value);
-                setSelectedCampaign(next || null);
-                setMonthFilter("all");
-              }}
-            >
-              {campaigns.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="space-y-1">
+          <div className="text-lg font-semibold text-text">Overall Forecast</div>
+          <div className="text-sm text-muted">Read-only analytics for planned campaigns</div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 [@media(min-width:1200px)]:grid-cols-4 auto-rows-fr gap-4">
           <Card title="Product Units" value={productUnits} />

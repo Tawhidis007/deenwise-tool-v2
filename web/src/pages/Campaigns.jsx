@@ -378,9 +378,11 @@ const CampaignsPage = () => {
       <div className="space-y-8">
         <header className="flex items-center justify-between">
           <div>
-            <p className="text-xs uppercase tracking-wide text-accent">Campaigns</p>
-            <h1 className="text-3xl font-semibold">Campaigns</h1>
-            <p className="text-muted text-sm">Manage campaign inputs, products, overrides, and OPEX.</p>
+            <p className="text-xs uppercase tracking-wide text-accent">CAMPAIGN PLANNING</p>
+            <h1 className="text-3xl font-semibold">Campaign Financial Scenarios</h1>
+            <p className="text-muted text-sm">
+              Model campaign performance by product mix, cost structure, and margin impact.
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <label className="text-sm text-muted">Display currency</label>

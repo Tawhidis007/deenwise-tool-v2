@@ -229,10 +229,10 @@ const ProductsPage = () => {
     <div className="space-y-8">
       <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-wide text-accent">Products</p>
-          <h1 className="text-3xl font-semibold">Product Management</h1>
+          <p className="text-xs uppercase tracking-wide text-accent">PRODUCT MASTER DATA</p>
+          <h1 className="text-3xl font-semibold">Product Cost & Pricing Model</h1>
           <p className="text-muted text-sm">
-            Full catalogue with inline editing. Click a product row to review and edit.
+            Maintain canonical product definitions that power campaign and revenue forecasting.
           </p>
         </div>
         <div className="flex items-center gap-2">
