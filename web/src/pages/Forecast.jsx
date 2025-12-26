@@ -153,6 +153,7 @@ const ForecastPage = () => {
   const [showImpactDefs, setShowImpactDefs] = React.useState(false);
   const [showForecastChart, setShowForecastChart] = React.useState(true);
   const [economicsBasis, setEconomicsBasis] = React.useState("gross");
+  const [showUnitEconomics, setShowUnitEconomics] = React.useState(true);
 
   const { data: campaigns = [] } = useQuery({
     queryKey: ["campaigns"],
@@ -463,6 +464,30 @@ const ForecastPage = () => {
       };
     });
   }, [productSummary, adjustedProductTotals, productMap, inputs]);
+
+  const unitWaterfallData = React.useMemo(() => {
+    return unitBreakdown.map((row) => {
+      const revenue = Number(row.unitRevenue || 0);
+      const factory = Number(row.factoryUnitCost || 0);
+      const totalCost = Number(row.unitCost || 0);
+      const overhead = Math.max(0, totalCost - factory);
+      const profit = Number(row.unitProfit || 0);
+      const base = revenue > 0 ? revenue : 1;
+      return {
+        product_id: row.product_id,
+        product_name: row.product_name,
+        revenue,
+        factory,
+        totalCost,
+        overhead,
+        profit,
+        margin: Number(row.unitMargin || 0),
+        factoryPct: Math.min(1, factory / base),
+        overheadPct: Math.min(1, overhead / base),
+        profitPct: Math.max(0, profit / base),
+      };
+    });
+  }, [unitBreakdown]);
 
   const discountsImpact = React.useMemo(() => {
     if (!productSummary.length) {
@@ -1234,6 +1259,67 @@ const ForecastPage = () => {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="pt-4 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-base font-semibold text-text">Unit Economics Waterfall</div>
+            <button
+              type="button"
+              className="text-xs text-muted border border-border/60 rounded-md px-2 py-1 bg-card hover:bg-border/40"
+              onClick={() => setShowUnitEconomics((prev) => !prev)}
+            >
+              {showUnitEconomics ? "Collapse" : "Expand"}
+            </button>
+          </div>
+          {showUnitEconomics && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 gap-3 text-xs text-muted">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-sm bg-amber-500" />
+                    <span>Unit Cost (Fully Loaded)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-sm bg-emerald-400" />
+                    <span>Unit Profit</span>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {unitWaterfallData.map((row) => {
+                  const costPct = Math.min(100, Math.max(0, (row.totalCost / (row.revenue || 1)) * 100));
+                  const profitPct = Math.max(0, 100 - costPct);
+                  return (
+                    <div key={row.product_id} className="border border-border/60 rounded-lg p-4 bg-surface space-y-2">
+                      <div className="text-sm font-semibold text-text">{row.product_name}</div>
+                      <div className="text-[11px] text-muted">
+                        100% = Unit Revenue ({fmt(row.revenue, currency)})
+                      </div>
+                      <div className="h-3 w-full rounded-full bg-border/40 overflow-hidden flex">
+                        <div
+                          className="h-full bg-amber-500/70"
+                          style={{ width: `${costPct}%` }}
+                          title={`Unit Cost (Fully Loaded): ${fmt(row.totalCost, currency)}`}
+                        />
+                        <div
+                          className="h-full bg-emerald-400/80"
+                          style={{ width: `${profitPct}%` }}
+                          title={`Unit Profit: ${fmt(row.profit, currency)}`}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-muted">
+                        <span className="text-amber-500">{costPct.toFixed(1)}% Cost</span>
+                        <span className="text-emerald-400">{profitPct.toFixed(1)}% Profit</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {!unitWaterfallData.length && (
+                  <div className="text-sm text-muted">No unit data available.</div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
