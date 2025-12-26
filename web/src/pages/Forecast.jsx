@@ -55,6 +55,7 @@ const ForecastPage = () => {
   const [monthFilter, setMonthFilter] = React.useState("all");
   const [sizeProductFilter, setSizeProductFilter] = React.useState("all");
   const [impactFilter, setImpactFilter] = React.useState("all");
+  const [pulseFilter, setPulseFilter] = React.useState("all");
 
   const { data: campaigns = [] } = useQuery({
     queryKey: ["campaigns"],
@@ -206,57 +207,62 @@ const ForecastPage = () => {
         }))
       : (forecast?.monthly || []).filter((r) => r.month === monthFilter);
 
-  // Rebalance marketing and OPEX per row to match campaign-level adjustments
-  const displayRows = React.useMemo(() => {
-    if (!baseRows.length) return [];
-    const perUnitMarketing = (pid) => {
-      const base = productMap[pid];
-      if (!base) return 0;
-      const ov = (inputs?.product_overrides || {})[pid] || {};
-      return Number(ov.marketing_cost_bdt ?? base.marketing_cost_bdt ?? 0);
-    };
-
-    const rowsWithComponents = baseRows.map((row) => {
-      const mPerUnit = perUnitMarketing(row.product_id);
-      const marketingUsed = Number(row.qty || 0) * mPerUnit;
-      const baseCost = Number(row.total_cost || 0);
-      const costNoMkt = baseCost - marketingUsed;
-      return { ...row, marketingUsed, costNoMkt };
-    });
-
-    const totalMarketingUsed = rowsWithComponents.reduce((s, r) => s + r.marketingUsed, 0);
-    const totalQty = rowsWithComponents.reduce((s, r) => s + Number(r.qty || 0), 0);
-
-    const allocMarketing = (row) => {
-      if (totalMarketingUsed > 0) {
-        return (row.marketingUsed / totalMarketingUsed) * marketingCalc.marketingTotalFinal;
-      }
-      if (totalQty > 0) {
-        return (Number(row.qty || 0) / totalQty) * marketingCalc.marketingTotalFinal;
-      }
-      return 0;
-    };
-
-    const allocOpex = (row) => {
-      if (totalQty > 0) {
-        return (Number(row.qty || 0) / totalQty) * opexTotal;
-      }
-      return 0;
-    };
-
-    return rowsWithComponents.map((row) => {
-      const marketingShare = allocMarketing(row);
-      const opexShare = allocOpex(row);
-      const adjustedCost = row.costNoMkt + marketingShare + opexShare;
-      const baseProfit = Number(row.net_profit || 0);
-      const adjustedProfit = baseProfit + row.marketingUsed - marketingShare - opexShare;
-      return {
-        ...row,
-        adjustedCost,
-        adjustedProfit,
+  const buildAdjustedRows = React.useCallback(
+    (rows) => {
+      if (!rows.length) return [];
+      const perUnitMarketing = (pid) => {
+        const base = productMap[pid];
+        if (!base) return 0;
+        const ov = (inputs?.product_overrides || {})[pid] || {};
+        return Number(ov.marketing_cost_bdt ?? base.marketing_cost_bdt ?? 0);
       };
-    });
-  }, [baseRows, productMap, inputs, marketingCalc, opexTotal]);
+
+      const rowsWithComponents = rows.map((row) => {
+        const mPerUnit = perUnitMarketing(row.product_id);
+        const marketingUsed = Number(row.qty || 0) * mPerUnit;
+        const baseCost = Number(row.total_cost || 0);
+        const costNoMkt = baseCost - marketingUsed;
+        return { ...row, marketingUsed, costNoMkt };
+      });
+
+      const totalMarketingUsed = rowsWithComponents.reduce((s, r) => s + r.marketingUsed, 0);
+      const totalQty = rowsWithComponents.reduce((s, r) => s + Number(r.qty || 0), 0);
+
+      const allocMarketing = (row) => {
+        if (totalMarketingUsed > 0) {
+          return (row.marketingUsed / totalMarketingUsed) * marketingCalc.marketingTotalFinal;
+        }
+        if (totalQty > 0) {
+          return (Number(row.qty || 0) / totalQty) * marketingCalc.marketingTotalFinal;
+        }
+        return 0;
+      };
+
+      const allocOpex = (row) => {
+        if (totalQty > 0) {
+          return (Number(row.qty || 0) / totalQty) * opexTotal;
+        }
+        return 0;
+      };
+
+      return rowsWithComponents.map((row) => {
+        const marketingShare = allocMarketing(row);
+        const opexShare = allocOpex(row);
+        const adjustedCost = row.costNoMkt + marketingShare + opexShare;
+        const baseProfit = Number(row.net_profit || 0);
+        const adjustedProfit = baseProfit + row.marketingUsed - marketingShare - opexShare;
+        return {
+          ...row,
+          adjustedCost,
+          adjustedProfit,
+        };
+      });
+    },
+    [productMap, inputs, marketingCalc, opexTotal]
+  );
+
+  // Rebalance marketing and OPEX per row to match campaign-level adjustments
+  const displayRows = React.useMemo(() => buildAdjustedRows(baseRows), [baseRows, buildAdjustedRows]);
 
   const productSummary = forecast?.product_summary || [];
   const sizeRows = forecast?.size_breakdown || [];
@@ -474,19 +480,22 @@ const ForecastPage = () => {
 
   const pulseData = React.useMemo(() => {
     if (!forecast?.monthly || !forecast.monthly.length) return [];
+    const adjustedMonthlyRows = buildAdjustedRows(forecast.monthly);
     const map = {};
-    forecast.monthly.forEach((r) => {
+    adjustedMonthlyRows.forEach((r) => {
       if (!map[r.month]) {
         map[r.month] = {
           month: r.month,
           month_nice: r.month_nice || niceMonth(r.month),
           revenue: 0,
+          cost: 0,
           profit: 0,
           qty: 0,
         };
       }
       map[r.month].revenue += Number(r.effective_revenue || 0);
-      map[r.month].profit += Number(r.net_profit || 0);
+      map[r.month].cost += Number(r.adjustedCost ?? r.total_cost ?? 0);
+      map[r.month].profit += Number(r.adjustedProfit ?? r.net_profit ?? 0);
       map[r.month].qty += Number(r.qty || 0);
     });
     const arr = Object.values(map);
@@ -495,13 +504,27 @@ const ForecastPage = () => {
         month: "campaign",
         month_nice: "Full Campaign",
         revenue: acc.revenue + m.revenue,
+        cost: acc.cost + m.cost,
         profit: acc.profit + m.profit,
         qty: acc.qty + m.qty,
       }),
-      { month: "campaign", month_nice: "Full Campaign", revenue: 0, profit: 0, qty: 0 }
+      { month: "campaign", month_nice: "Full Campaign", revenue: 0, cost: 0, profit: 0, qty: 0 }
     );
     return [totalAll, ...arr];
-  }, [forecast]);
+  }, [forecast, buildAdjustedRows]);
+
+  const pulseOptions = React.useMemo(() => {
+    if (!pulseData.length) return [];
+    return pulseData.map((m) => ({
+      value: m.month,
+      label: m.month === "campaign" ? "Full campaign" : m.month_nice,
+    }));
+  }, [pulseData]);
+
+  const pulseFiltered = React.useMemo(() => {
+    if (pulseFilter === "all") return pulseData;
+    return pulseData.filter((m) => m.month === pulseFilter);
+  }, [pulseData, pulseFilter]);
 
   return (
     <div className="p-6 space-y-6">
@@ -798,12 +821,40 @@ const ForecastPage = () => {
       </div>
 
       <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-4">
-        <div className="text-lg font-semibold text-text">Visual Pulse</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-lg font-semibold text-text">Visual Pulse</div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted">Period</label>
+            <select
+              className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text"
+              value={pulseFilter}
+              onChange={(e) => setPulseFilter(e.target.value)}
+              disabled={!pulseOptions.length}
+            >
+              <option value="all">All</option>
+              {pulseOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
         <div className="text-sm text-muted">Revenue, profit, margin, and volume at a glance.</div>
         <div className="space-y-3">
-          {pulseData.map((m) => {
+          {pulseFiltered.map((m) => {
             const margin = m.revenue ? (m.profit / m.revenue) * 100 : 0;
-            const profitBar = m.revenue ? Math.min(100, Math.max(0, (m.profit / m.revenue) * 100 + 50)) : 50;
+            let costPct = m.revenue ? Math.min(1, Math.max(0, (m.cost || 0) / m.revenue)) : 1;
+            let profitPct = m.revenue ? Math.max(0, (m.profit || 0) / m.revenue) : 0;
+            if (profitPct === 0) {
+              costPct = 1;
+            } else {
+              const total = costPct + profitPct;
+              if (total > 0) {
+                costPct /= total;
+                profitPct /= total;
+              }
+            }
             return (
               <div key={m.month} className="border border-border/60 rounded-lg p-4 bg-surface space-y-2">
                 <div className="flex items-center justify-between">
@@ -820,17 +871,24 @@ const ForecastPage = () => {
                     <span className="font-semibold text-text">{fmt(m.profit, currency)}</span>
                   </div>
                 </div>
-                <div className="flex items-center justify-between text-xs text-muted">
-                  <span>Margin</span>
-                  <span className="font-semibold text-text">{pct(margin)}</span>
-                </div>
-                <div className="h-2 rounded-full bg-border/60 overflow-hidden">
-                  <div className="h-full bg-emerald-400/80" style={{ width: `${profitBar}%` }} />
+                <div className="space-y-1">
+                  <div className="flex text-xs text-muted">
+                    <div className="text-center" style={{ width: `${costPct * 100}%` }}>
+                      {pct(costPct * 100)} <span className="text-muted">(Cost)</span>
+                    </div>
+                    <div className="text-center text-emerald-600" style={{ width: `${profitPct * 100}%` }}>
+                      {pct(profitPct * 100)} <span className="text-muted">(Profit)</span>
+                    </div>
+                  </div>
+                  <div className="flex h-2 rounded-full bg-border/40 overflow-hidden">
+                    <div className="h-full bg-slate-500/80" style={{ width: `${costPct * 100}%` }} />
+                    <div className="h-full bg-emerald-400/80" style={{ width: `${profitPct * 100}%` }} />
+                  </div>
                 </div>
               </div>
             );
           })}
-          {!pulseData.length && (
+          {!pulseFiltered.length && (
             <div className="text-sm text-muted">No forecast data available.</div>
           )}
         </div>
