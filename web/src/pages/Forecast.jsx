@@ -72,9 +72,9 @@ const describeDonutSlice = (cx, cy, r, ir, startAngle, endAngle) => {
 };
 
 const Card = ({ title, value, subtitle }) => (
-  <div className="bg-card border border-border/60 rounded-xl p-4 flex flex-col gap-1 shadow-sm">
-    <div className="text-sm text-muted">{title}</div>
-    <div className="text-2xl font-semibold text-text">{value}</div>
+  <div className="bg-card border border-border/60 rounded-xl p-4 flex h-full flex-col gap-2 shadow-sm">
+    <div className="text-sm text-muted leading-snug whitespace-normal break-words">{title}</div>
+    <div className="text-2xl font-semibold text-text whitespace-nowrap">{value}</div>
     {subtitle && <div className="text-xs text-muted">{subtitle}</div>}
   </div>
 );
@@ -212,6 +212,12 @@ const ForecastPage = () => {
   const totalCost = marketingAdjustedCost + baseOpex;
   const netProfit = marketingAdjustedProfit - baseOpex;
   const netMarginPct = effectiveRevenue > 0 ? ((netProfit || 0) / effectiveRevenue) * 100 : 0;
+  const marketingEfficiencyRatio =
+    marketingCalc.marketingTotalFinal > 0
+      ? effectiveRevenue / marketingCalc.marketingTotalFinal
+      : null;
+  const revenueLeakagePct = grossRevenue > 0 ? ((grossRevenue - effectiveRevenue) / grossRevenue) * 100 : null;
+  const netMarginValue = effectiveRevenue > 0 ? ((netProfit || 0) / effectiveRevenue) * 100 : null;
 
   const monthlyOptions = React.useMemo(() => {
     if (!forecast?.monthly) return [];
@@ -653,13 +659,51 @@ const ForecastPage = () => {
             </select>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 [@media(min-width:1200px)]:grid-cols-4 auto-rows-fr gap-4">
           <Card title="Product Units" value={productUnits} />
           <Card title="Gross Revenue" value={fmt(grossRevenue, currency)} />
-          <Card title="Effective Revenue (promo/discount/returns)" value={fmt(effectiveRevenue, currency)} />
-          <Card title="Total Cost (incl. MKT/OPEX/Packaging)" value={fmt(totalCost, currency)} />
+          <Card title="Effective Revenue (after discounts & returns)" value={fmt(effectiveRevenue, currency)} />
+          <Card
+            title="Revenue Leakage Rate"
+            value={
+              revenueLeakagePct !== null ? (
+                <span>
+                  {revenueLeakagePct.toFixed(1)}
+                  <span className="text-sm text-muted">%</span>
+                </span>
+              ) : (
+                "--"
+              )
+            }
+          />
+          <Card title="Total Cost (incl. Marketing, OPEX, Packaging)" value={fmt(totalCost, currency)} />
           <Card title="Net Profit" value={fmt(netProfit, currency)} />
-          <Card title="Net Margin" value={pct(netMarginPct)} />
+          <Card
+            title="Net Margin"
+            value={
+              netMarginValue !== null ? (
+                <span>
+                  {netMarginValue.toFixed(1)}
+                  <span className="text-sm text-muted">%</span>
+                </span>
+              ) : (
+                "--"
+              )
+            }
+          />
+          <Card
+            title="Marketing Efficiency Ratio"
+            value={
+              marketingEfficiencyRatio !== null ? (
+                <span>
+                  {marketingEfficiencyRatio.toFixed(2)}
+                  <span className="text-sm text-muted">x</span>
+                </span>
+              ) : (
+                "--"
+              )
+            }
+          />
         </div>
       </div>
 
