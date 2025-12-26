@@ -27,8 +27,8 @@ const emptyProductForm = {
 const ProductRow = ({ product, symbol, onSelect, isSelected }) => (
   <tr
     className={clsx(
-      "border-b border-border/40 hover:bg-white/5 transition-colors cursor-pointer",
-      isSelected && "bg-white/10"
+      "border-b border-border/40 hover:bg-border/30 transition-colors cursor-pointer",
+      isSelected && "bg-border/40"
     )}
     onClick={() => onSelect(product.id)}
   >
@@ -275,7 +275,7 @@ const ProductsPage = () => {
                 startAddNew();
                 setShowAdd(true);
               }}
-              className="bg-accent text-black px-4 py-2 rounded-md font-semibold"
+              className="bg-accent text-bg px-4 py-2 rounded-md font-semibold"
             >
               Add New Product
             </button>
@@ -310,7 +310,7 @@ const ProductsPage = () => {
               <tbody>
                 {filteredProducts.map((p) =>
                   editId === p.id ? (
-                    <tr key={p.id} className="border-b border-border/40 bg-white/5">
+                    <tr key={p.id} className="border-b border-border/40 bg-border/30">
                       <td className="py-2 px-3">
                         <input
                           className="w-full bg-bg border border-border rounded px-2 py-1"
@@ -374,7 +374,7 @@ const ProductsPage = () => {
                       </td>
                       <td className="py-2 px-3 space-x-2">
                         <button
-                          className="text-sm bg-accent text-black px-3 py-1 rounded-md"
+                          className="text-sm bg-accent text-bg px-3 py-1 rounded-md"
                           onClick={(e) => {
                             e.stopPropagation();
                             submitUpdate();
@@ -397,7 +397,7 @@ const ProductsPage = () => {
                   ) : (
                     <tr
                       key={p.id}
-                      className="border-b border-border/40 hover:bg-white/5 transition-colors"
+                      className="border-b border-border/40 hover:bg-border/30 transition-colors"
                     >
                       <td className="py-3 px-3 font-semibold">{p.name}</td>
                       <td className="py-3 px-3 text-muted">{p.category}</td>
@@ -448,7 +448,7 @@ const ProductsPage = () => {
       </div>
 
       {showAdd && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-40">
+        <div className="fixed inset-0 bg-bg/80 backdrop-blur-sm flex items-center justify-center z-40">
           <div className="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-4xl p-6 space-y-6">
             <div className="flex items-center justify-between">
               <div>
@@ -541,7 +541,7 @@ const ProductsPage = () => {
               </button>
               <button
                 onClick={submitAdd}
-                className="bg-accent text-black px-4 py-2 rounded-md font-semibold"
+                className="bg-accent text-bg px-4 py-2 rounded-md font-semibold"
                 disabled={createMut.isLoading}
               >
                 Add Product
@@ -552,7 +552,7 @@ const ProductsPage = () => {
       )}
 
       {confirmDelete && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-bg/80 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-surface border border-border rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
             <h3 className="text-xl font-semibold">Delete product</h3>
             <p className="text-muted">
@@ -566,7 +566,7 @@ const ProductsPage = () => {
                 Cancel
               </button>
               <button
-                className="px-4 py-2 rounded-md bg-red-500 text-white"
+                className="px-4 py-2 rounded-md bg-red-500 text-text"
                 onClick={() => deleteMut.mutate(confirmDelete.id)}
                 disabled={deleteMut.isLoading}
               >
@@ -581,3 +581,4 @@ const ProductsPage = () => {
 };
 
 export default ProductsPage;
+

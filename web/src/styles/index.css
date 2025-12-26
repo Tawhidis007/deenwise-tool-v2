@@ -4,11 +4,58 @@
 
 :root {
   color-scheme: dark;
+  --color-bg: #2b1010;
+  --color-surface: #1d0a0c;
+  --color-accent: #efeacd;
+  --color-accent-2: rgba(239, 234, 205, 0.78);
+  --color-accent-55: rgba(239, 234, 205, 0.58);
+  --color-accent-35: rgba(239, 234, 205, 0.35);
+  --color-accent-15: rgba(239, 234, 205, 0.15);
+  --color-accent-04: rgba(239, 234, 205, 0.04);
+  --color-text: #efeacd;
+  --color-muted: rgba(239, 234, 205, 0.55);
+  --color-border: rgba(239, 234, 205, 0.18);
+  --color-profit: #1fa271;
+  --color-positive: #178a63;
+  --color-gross: #6fbac6;
+  --color-effective: #4aa694;
+  --color-cost-total: #b07a2c;
+  --color-manufacturing: #946231;
+  --color-packaging: #a36a34;
+  --color-marketing: #b07a2c;
+  --color-opex: #9a5b22;
+  --color-discount: #c6742a;
+  --color-returns: #9b3f33;
+}
+
+[data-theme="legacy"] {
+  --color-bg: #0b0c10;
+  --color-surface: #0f1119;
+  --color-accent: #3dd598;
+  --color-accent-2: #7dd3fc;
+  --color-accent-55: rgba(232, 236, 243, 0.55);
+  --color-accent-35: rgba(232, 236, 243, 0.35);
+  --color-accent-15: rgba(232, 236, 243, 0.15);
+  --color-accent-04: rgba(255, 255, 255, 0.02);
+  --color-text: #e8ecf3;
+  --color-muted: #9ea5b4;
+  --color-border: #1f2533;
+  --color-profit: #10b981;
+  --color-positive: #34d399;
+  --color-gross: #7dd3fc;
+  --color-effective: #34d399;
+  --color-cost-total: #f59e0b;
+  --color-manufacturing: #6b7280;
+  --color-packaging: #9ca3af;
+  --color-marketing: #b45309;
+  --color-opex: #92400e;
+  --color-discount: #f59e0b;
+  --color-returns: #ef4444;
 }
 
 body {
-  background-color: #0b0c10;
-  color: #e8ecf3;
+  background-color: var(--color-bg);
+  color: var(--color-text);
   font-family: "Inter", system-ui, -apple-system, sans-serif;
 }
 
@@ -18,18 +65,96 @@ h3 {
   letter-spacing: -0.02em;
 }
 
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
+
+  input,
+  select,
+  textarea {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-muted);
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    outline: none;
+    border-color: var(--color-accent-35);
+    box-shadow: 0 0 0 2px var(--color-accent-15);
+  }
+
+  button {
+    font-weight: 600;
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease,
+      box-shadow 160ms ease;
+  }
+
+  button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  button:not(:disabled):hover {
+    filter: brightness(1.06);
+    border-color: var(--color-accent-35);
+    box-shadow: 0 0 0 1px var(--color-accent-15);
+  }
+
+  button:not(:disabled):active {
+    transform: translateY(0.5px);
+  }
+
+  button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-accent-15);
+  }
+}
+
 table thead th {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-size: 0.75rem;
 }
 
+table thead {
+  background-color: rgba(239, 234, 205, 0.03);
+}
+
+table tbody tr {
+  transition: background-color 150ms ease;
+}
+
 table tbody tr:hover {
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--color-accent-04);
 }
 
 .card {
   @apply bg-surface border border-border rounded-xl p-5 shadow-lg shadow-black/20;
+  background-image: linear-gradient(180deg, rgba(239, 234, 205, 0.03), rgba(0, 0, 0, 0));
+}
+
+.card-standout {
+  background-color: var(--color-surface);
+  background-image:
+    radial-gradient(circle at top right, var(--color-accent-04), transparent 55%),
+    linear-gradient(180deg, var(--color-accent-04), rgba(0, 0, 0, 0));
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 var(--color-accent-04);
 }
 
 .muted {

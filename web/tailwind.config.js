@@ -7,15 +7,17 @@ export default {
   theme: {
     extend: {
       colors: {
-        surface: "#0f1119",
-        bg: "#0b0c10",
-        accent: "#3dd598",
-        accent2: "#7dd3fc",
-        border: "#1f2533",
-        text: "#e8ecf3",
-        muted: "#9ea5b4",
+        surface: "var(--color-surface)",
+        card: "var(--color-surface)",
+        bg: "var(--color-bg)",
+        accent: "var(--color-accent)",
+        accent2: "var(--color-accent-2)",
+        border: "var(--color-border)",
+        text: "var(--color-text)",
+        muted: "var(--color-muted)",
       },
     },
   },
   plugins: [],
 };
+

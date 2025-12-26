@@ -332,7 +332,7 @@ const ScenarioPage = () => {
           </div>
           <button
             onClick={handleCreate}
-            className="bg-accent text-black px-4 py-2 rounded-md font-semibold"
+            className="bg-accent text-bg px-4 py-2 rounded-md font-semibold"
             disabled={createMut.isLoading}
           >
             Create Scenario
@@ -374,7 +374,7 @@ const ScenarioPage = () => {
           )}
           <button
             onClick={() => saveProdMut.mutate()}
-            className="bg-accent text-black px-4 py-2 rounded-md font-semibold"
+            className="bg-accent text-bg px-4 py-2 rounded-md font-semibold"
             disabled={!selectedScenarioId || saveProdMut.isLoading}
           >
             Save Product Overrides
@@ -393,7 +393,7 @@ const ScenarioPage = () => {
           )}
           <button
             onClick={() => saveOpexMut.mutate()}
-            className="bg-accent text-black px-4 py-2 rounded-md font-semibold"
+            className="bg-accent text-bg px-4 py-2 rounded-md font-semibold"
             disabled={!selectedScenarioId || saveOpexMut.isLoading}
           >
             Save OPEX Overrides
@@ -420,7 +420,7 @@ const ScenarioPage = () => {
           ))}
           <button
             onClick={() => saveFxMut.mutate()}
-            className="bg-accent text-black px-4 py-2 rounded-md font-semibold"
+            className="bg-accent text-bg px-4 py-2 rounded-md font-semibold"
             disabled={!selectedScenarioId || saveFxMut.isLoading}
           >
             Save FX Overrides

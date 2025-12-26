@@ -7,6 +7,7 @@ const SettingsPage = () => {
   const { currency, setCurrency } = useCurrency();
   const [rates, setRates] = React.useState({ USD: 117, GBP: 146, BDT: 1 });
   const [statusMsg, setStatusMsg] = React.useState("");
+  const [uiTheme, setUiTheme] = React.useState("premium");
 
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: fetchDisplaySettings });
 
@@ -16,6 +17,11 @@ const SettingsPage = () => {
       setRates(settingsQuery.data.exchange_rates || { USD: 117, GBP: 146, BDT: 1 });
     }
   }, [settingsQuery.data, setCurrency]);
+
+  React.useEffect(() => {
+    const savedTheme = localStorage.getItem("dw-ui-theme") || "premium";
+    setUiTheme(savedTheme);
+  }, []);
 
   const updateMut = useMutation({
     mutationFn: updateDisplaySettings,
@@ -35,6 +41,12 @@ const SettingsPage = () => {
     setRates((prev) => ({ ...prev, [key]: Number(val) }));
   };
 
+  const onThemeChange = (nextTheme) => {
+    setUiTheme(nextTheme);
+    localStorage.setItem("dw-ui-theme", nextTheme);
+    document.documentElement.setAttribute("data-theme", nextTheme);
+  };
+
   return (
     <div className="space-y-8">
       <header>
@@ -44,6 +56,35 @@ const SettingsPage = () => {
       </header>
 
       {statusMsg && <div className="text-sm text-accent">{statusMsg}</div>}
+
+      <section className="card space-y-4">
+        <h2 className="text-xl font-semibold">Appearance</h2>
+        <p className="text-muted text-sm">
+          Switch between the DeenWise premium palette and the classic dark interface.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm text-muted">UI theme</label>
+            <select
+              className="mt-1 w-full"
+              value={uiTheme}
+              onChange={(e) => onThemeChange(e.target.value)}
+            >
+              <option value="premium">Premium (DeenWise)</option>
+              <option value="legacy">Classic Dark</option>
+            </select>
+          </div>
+          <div className="bg-bg border border-border rounded-lg p-3">
+            <div className="text-xs text-muted uppercase tracking-wide">Current theme</div>
+            <div className="text-lg font-semibold mt-1">
+              {uiTheme === "legacy" ? "Classic Dark" : "Premium (DeenWise)"}
+            </div>
+            <p className="text-muted text-sm mt-2">
+              Choose the look that best matches your working environment.
+            </p>
+          </div>
+        </div>
+      </section>
 
       <section className="card space-y-4">
         <h2 className="text-xl font-semibold">Currency Settings</h2>
@@ -103,7 +144,7 @@ const SettingsPage = () => {
         </div>
         <button
           onClick={handleSave}
-          className="bg-accent text-black px-4 py-2 rounded-md font-semibold"
+          className="bg-accent text-bg px-4 py-2 rounded-md font-semibold"
           disabled={updateMut.isLoading}
         >
           Save Exchange Rates

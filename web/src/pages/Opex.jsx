@@ -281,7 +281,7 @@ const OpexPage = () => {
             />
             <button
               onClick={handleCreate}
-              className="bg-accent text-black px-4 py-2 rounded-md font-semibold"
+              className="bg-accent text-bg px-4 py-2 rounded-md font-semibold"
               disabled={createMut.isLoading}
             >
               Add OPEX
@@ -334,7 +334,7 @@ const OpexPage = () => {
               <div className="flex items-center gap-3">
                 <button
                   onClick={handleUpdate}
-                  className="bg-accent text-black px-4 py-2 rounded-md font-semibold"
+                  className="bg-accent text-bg px-4 py-2 rounded-md font-semibold"
                   disabled={!selectedOpexId || updateMut.isLoading}
                 >
                   Save changes
@@ -382,7 +382,7 @@ const OpexPage = () => {
               </div>
               <button
                 onClick={() => saveLinksMut.mutate()}
-                className="bg-accent text-black px-4 py-2 rounded-md font-semibold"
+                className="bg-accent text-bg px-4 py-2 rounded-md font-semibold"
                 disabled={saveLinksMut.isLoading}
               >
                 Save Selection

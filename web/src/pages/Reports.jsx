@@ -50,7 +50,7 @@ const ReportsPage = () => {
           </div>
           <button
             onClick={() => handleExport(exportProducts, "Products.xlsx")}
-            className="bg-accent text-black px-4 py-2 rounded-md font-semibold"
+            className="bg-accent text-bg px-4 py-2 rounded-md font-semibold"
           >
             Download
           </button>
@@ -65,7 +65,7 @@ const ReportsPage = () => {
           </div>
           <button
             onClick={() => handleExport(exportOpex, "OPEX_Items.xlsx")}
-            className="bg-accent text-black px-4 py-2 rounded-md font-semibold"
+            className="bg-accent text-bg px-4 py-2 rounded-md font-semibold"
           >
             Download
           </button>
@@ -96,7 +96,7 @@ const ReportsPage = () => {
                 </select>
                 <button
                   onClick={() => handleExport(() => exportCampaign(selectedCampaignId), "campaign.xlsx")}
-                  className="bg-accent text-black px-4 py-2 rounded-md font-semibold"
+                  className="bg-accent text-bg px-4 py-2 rounded-md font-semibold"
                 >
                   Export
                 </button>

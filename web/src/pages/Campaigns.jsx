@@ -50,7 +50,7 @@ const ProgressRing = ({ total, current }) => {
     <div className="relative h-10 w-10">
       <div
         className="absolute inset-0 rounded-full"
-        style={{ background: `conic-gradient(#5eead4 ${pct}%, #1f2937 ${pct}%)` }}
+        style={{ background: `conic-gradient(var(--color-accent) ${pct}%, var(--color-surface) ${pct}%)` }}
       />
       <div className="absolute inset-1 rounded-full bg-bg flex items-center justify-center text-[10px] text-muted">
         {Math.round(pct)}%
@@ -387,7 +387,7 @@ const CampaignsPage = () => {
           <div className="flex items-center gap-2">
             <label className="text-sm text-muted">Display currency</label>
             <select
-              className="bg-surface border border-border rounded px-3 py-2 text-sm"
+              className="bg-surface border border-border/70 rounded px-3 py-2 text-sm"
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
             >
@@ -401,12 +401,12 @@ const CampaignsPage = () => {
         {statusMsg && <div className="text-sm text-accent">{statusMsg}</div>}
 
         <section className="card space-y-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="space-y-2">
               <div className="text-sm text-muted">Selected campaign</div>
               <div className="flex flex-wrap gap-3 items-center">
                 <select
-                  className="bg-bg border border-border rounded px-3 py-2"
+                  className="bg-surface border border-border/70 rounded px-3 py-2"
                   value={selectedCampaign?.id || ""}
                   onChange={(e) => changeCampaign(e.target.value)}
                 >
@@ -416,33 +416,36 @@ const CampaignsPage = () => {
                     </option>
                   ))}
                 </select>
-                {!isEditing && (
-                  <button
-                    className="px-4 py-2 rounded-md font-semibold bg-accent text-black"
-                    onClick={() => setShowCreate(true)}
-                    disabled={isEditing}
-                  >
-                    Create Campaign
-                  </button>
-                )}
-                <button
-                  className={`border border-border px-4 py-2 rounded-md ${isEditing ? "text-text" : "text-muted"}`}
-                  onClick={isEditing ? cancelEdit : startEdit}
-                  disabled={!selectedCampaign}
-                >
-                  {isEditing ? "Cancel" : "Edit Campaign"}
-                </button>
-                <button
-                  className="border border-red-500 text-red-400 px-4 py-2 rounded-md disabled:opacity-50"
-                  onClick={() => {
-                    setDeleteTarget(selectedCampaign?.id || null);
-                    setShowDeleteModal(true);
-                  }}
-                  disabled={!selectedCampaign || isEditing || deleteCampMut.isLoading}
-                >
-                  Delete Campaign
-                </button>
               </div>
+            </div>
+            <div className="flex flex-wrap justify-start md:justify-end gap-2">
+              {!isEditing && (
+                <button
+                  className="px-4 py-2 rounded-md font-semibold bg-accent text-bg"
+                  onClick={() => setShowCreate(true)}
+                  disabled={isEditing}
+                >
+                  Create Campaign
+                </button>
+              )}
+              <button
+                className={`border border-border/60 px-4 py-2 rounded-md ${isEditing ? "text-text" : "text-muted"}`}
+                onClick={isEditing ? cancelEdit : startEdit}
+                disabled={!selectedCampaign}
+              >
+                {isEditing ? "Cancel" : "Edit Campaign"}
+              </button>
+              <button
+                className="border px-4 py-2 rounded-md disabled:opacity-50"
+                style={{ borderColor: "var(--color-returns)", color: "var(--color-returns)" }}
+                onClick={() => {
+                  setDeleteTarget(selectedCampaign?.id || null);
+                  setShowDeleteModal(true);
+                }}
+                disabled={!selectedCampaign || isEditing || deleteCampMut.isLoading}
+              >
+                Delete Campaign
+              </button>
             </div>
           </div>
 
@@ -451,7 +454,7 @@ const CampaignsPage = () => {
               <div>
                 <label className="text-sm text-muted">Name</label>
                 <input
-                  className="mt-1 w-full bg-bg border border-border rounded px-3 py-2"
+                  className="mt-1 w-full bg-surface border border-border/70 rounded px-3 py-2"
                   value={campaignForm.name || ""}
                   onChange={(e) => setCampaignForm((p) => ({ ...p, name: e.target.value }))}
                   disabled={disabled}
@@ -461,7 +464,7 @@ const CampaignsPage = () => {
                 <label className="text-sm text-muted">Start</label>
                 <input
                   type="date"
-                  className="mt-1 w-full bg-bg border border-border rounded px-3 py-2"
+                  className="mt-1 w-full bg-surface border border-border/70 rounded px-3 py-2"
                   value={campaignForm.start_date?.slice(0, 10) || ""}
                   onChange={(e) => setCampaignForm((p) => ({ ...p, start_date: e.target.value }))}
                   disabled={disabled}
@@ -471,7 +474,7 @@ const CampaignsPage = () => {
                 <label className="text-sm text-muted">End</label>
                 <input
                   type="date"
-                  className="mt-1 w-full bg-bg border border-border rounded px-3 py-2"
+                  className="mt-1 w-full bg-surface border border-border/70 rounded px-3 py-2"
                   value={campaignForm.end_date?.slice(0, 10) || ""}
                   onChange={(e) => setCampaignForm((p) => ({ ...p, end_date: e.target.value }))}
                   disabled={disabled}
@@ -494,7 +497,7 @@ const CampaignsPage = () => {
                 </div>
                 {isEditing && (
                   <button
-                    className="bg-accent text-black px-3 py-2 rounded-md font-semibold"
+                    className="bg-accent text-bg px-3 py-2 rounded-md font-semibold"
                     onClick={() => setShowProductsModal(true)}
                   >
                     Manage Campaign Products
@@ -522,14 +525,14 @@ const CampaignsPage = () => {
                     const totalQty = Number(quantities[pid] || 0);
                     const sizeTotal = Object.values(sizes[pid] || {}).reduce((a, b) => a + Number(b || 0), 0);
                     return (
-                      <div key={pid} className="border border-border rounded-lg p-3 space-y-3">
+                      <div key={pid} className="card-standout border border-border/60 rounded-lg p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="font-semibold">{prod.name}</div>
                             <div className="text-xs text-muted">{prod.category}</div>
                           </div>
                           <button
-                            className="px-3 py-1 rounded-md border border-border text-sm text-muted hover:text-text"
+                            className="px-3 py-1 rounded-md border border-border/60 text-sm text-muted hover:text-text"
                             onClick={() => setCollapsedProducts((prev) => ({ ...prev, [pid]: !collapsed }))}
                           >
                             {collapsed ? "Expand" : "Collapse"}
@@ -545,7 +548,7 @@ const CampaignsPage = () => {
                                   type="number"
                                   min="0"
                                   step="1"
-                                  className="bg-bg border border-border rounded px-3 py-2 w-32"
+                                  className="bg-surface border border-border/70 rounded px-3 py-2 w-32"
                                   value={totalQty}
                                   onChange={(e) => setQty(pid, e.target.value)}
                                   disabled={disabled}
@@ -561,7 +564,7 @@ const CampaignsPage = () => {
                                   type="number"
                                   min="0"
                                   step="0.01"
-                                  className="mt-1 w-full bg-bg border border-border rounded px-2 py-1 text-sm"
+                                  className="mt-1 w-full bg-surface border border-border/70 rounded px-2 py-1 text-sm"
                                   value={productOverrides[pid]?.packaging_cost_bdt ?? ""}
                                   onChange={(e) => setOverride(pid, "packaging_cost_bdt", e.target.value)}
                                   disabled={disabled}
@@ -574,7 +577,7 @@ const CampaignsPage = () => {
                                   type="number"
                                   min="0"
                                   step="0.01"
-                                  className="mt-1 w-full bg-bg border border-border rounded px-2 py-1 text-sm"
+                                  className="mt-1 w-full bg-surface border border-border/70 rounded px-2 py-1 text-sm"
                                   value={productOverrides[pid]?.marketing_cost_bdt ?? ""}
                                   onChange={(e) => setOverride(pid, "marketing_cost_bdt", e.target.value)}
                                   disabled={disabled}
@@ -587,7 +590,7 @@ const CampaignsPage = () => {
                                   type="number"
                                   min="0"
                                   step="0.01"
-                                  className="mt-1 w-full bg-bg border border-border rounded px-2 py-1 text-sm"
+                                  className="mt-1 w-full bg-surface border border-border/70 rounded px-2 py-1 text-sm"
                                   value={
                                     productOverrides[pid]?.discount_rate !== undefined &&
                                     productOverrides[pid]?.discount_rate !== null
@@ -605,7 +608,7 @@ const CampaignsPage = () => {
                                   type="number"
                                   min="0"
                                   step="0.01"
-                                  className="mt-1 w-full bg-bg border border-border rounded px-2 py-1 text-sm"
+                                  className="mt-1 w-full bg-surface border border-border/70 rounded px-2 py-1 text-sm"
                                   value={
                                     productOverrides[pid]?.return_rate !== undefined &&
                                     productOverrides[pid]?.return_rate !== null
@@ -627,7 +630,7 @@ const CampaignsPage = () => {
                                       type="number"
                                       min="0"
                                       step="1"
-                                      className="mt-1 w-full bg-bg border border-border rounded px-2 py-1 text-sm"
+                                      className="mt-1 w-full bg-surface border border-border/70 rounded px-2 py-1 text-sm"
                                       value={perProductWeights[pid]?.[m] ?? (months.length === 1 ? 100 : 0)}
                                       onChange={(e) => setWeight(pid, m, e.target.value)}
                                       disabled={disabled}
@@ -650,7 +653,7 @@ const CampaignsPage = () => {
                                       type="number"
                                       min="0"
                                       step="1"
-                                      className="mt-1 w-full bg-bg border border-border rounded px-2 py-1 text-sm"
+                                      className="mt-1 w-full bg-surface border border-border/70 rounded px-2 py-1 text-sm"
                                       value={sizes[pid]?.[s] || 0}
                                       onChange={(e) => setSize(pid, s, e.target.value)}
                                       disabled={disabled}
@@ -674,7 +677,7 @@ const CampaignsPage = () => {
                       setQuantitiesDirty(false);
                       saveQuantMut.mutate();
                     }}
-                    className="bg-accent text-black px-4 py-2 rounded-md font-semibold"
+                    className="bg-accent text-bg px-4 py-2 rounded-md font-semibold"
                     disabled={saveQuantMut.isLoading}
                   >
                     Save Quantities
@@ -684,7 +687,7 @@ const CampaignsPage = () => {
                       resetToBaseline();
                       setIsEditing(true);
                     }}
-                    className="px-4 py-2 rounded-md border border-border text-muted"
+                    className="px-4 py-2 rounded-md border border-border/60 text-muted"
                     disabled={saveQuantMut.isLoading}
                   >
                     Cancel
@@ -699,7 +702,7 @@ const CampaignsPage = () => {
                 <h2 className="text-xl font-semibold">OPEX for Campaign</h2>
                 {isEditing && (
                   <button
-                    className="bg-accent text-black px-3 py-2 rounded-md font-semibold"
+                    className="bg-accent text-bg px-3 py-2 rounded-md font-semibold"
                     onClick={() => setShowOpexModal(true)}
                   >
                     Manage OPEX
@@ -715,7 +718,7 @@ const CampaignsPage = () => {
                     return (
                       <div
                         key={id}
-                        className="px-3 py-2 rounded-lg bg-border/30 text-sm border border-border flex flex-col gap-1"
+                        className="px-3 py-2 rounded-lg bg-border/30 text-sm border border-border/60 flex flex-col gap-1"
                       >
                         <div className="font-semibold">{item?.name || "Unknown OPEX"}</div>
                         <div className="text-xs text-muted">
@@ -735,7 +738,7 @@ const CampaignsPage = () => {
             {isEditing && (
               <div className="flex justify-end gap-3">
                 <button
-                  className="bg-accent text-black px-4 py-2 rounded-md font-semibold"
+                  className="bg-accent text-bg px-4 py-2 rounded-md font-semibold"
                   onClick={() =>
                     saveQuantMut.mutate().then(() => {
                       updateCampMut.mutate({
@@ -754,7 +757,7 @@ const CampaignsPage = () => {
                   Save Campaign
                 </button>
                 <button
-                  className="px-4 py-2 rounded-md border border-border text-muted"
+                  className="px-4 py-2 rounded-md border border-border/60 text-muted"
                   onClick={cancelEdit}
                   disabled={updateCampMut.isLoading || saveQuantMut.isLoading}
                 >
@@ -767,7 +770,7 @@ const CampaignsPage = () => {
       </div>
       {/* Modals */}
       {showProductsModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-bg/80">
           <div className="bg-surface rounded-lg shadow-xl w-full max-w-3xl p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Manage Campaign Products</h3>
@@ -781,7 +784,7 @@ const CampaignsPage = () => {
                 return (
                   <label
                     key={p.id}
-                    className={`border border-border rounded-md p-3 flex items-center gap-3 cursor-pointer ${
+                    className={`border border-border/70 rounded-md p-3 flex items-center gap-3 cursor-pointer ${
                       checked ? "bg-border/20" : ""
                     }`}
                   >
@@ -800,11 +803,11 @@ const CampaignsPage = () => {
               })}
             </div>
             <div className="flex justify-end gap-2">
-              <button className="px-4 py-2 rounded-md border border-border text-muted" onClick={() => setShowProductsModal(false)}>
+              <button className="px-4 py-2 rounded-md border border-border/60 text-muted" onClick={() => setShowProductsModal(false)}>
                 Close
               </button>
               <button
-                className="px-4 py-2 rounded-md bg-accent text-black font-semibold"
+                className="px-4 py-2 rounded-md bg-accent text-bg font-semibold"
                 onClick={() => {
                   setQuantitiesDirty(true);
                   setShowProductsModal(false);
@@ -818,7 +821,7 @@ const CampaignsPage = () => {
       )}
 
       {showOpexModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-bg/80">
           <div className="bg-surface rounded-lg shadow-xl w-full max-w-5xl p-6 space-y-6">
             <div className="flex items-center justify-between">
               <div>
@@ -831,10 +834,10 @@ const CampaignsPage = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="border border-border rounded-lg p-3 space-y-3">
+              <div className="border border-border/70 rounded-lg p-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="font-semibold">Available OPEX</h4>
-                  <button className="bg-accent text-black px-3 py-2 rounded-md font-semibold" onClick={() => setShowCreateOpex(true)}>
+                  <button className="bg-accent text-bg px-3 py-2 rounded-md font-semibold" onClick={() => setShowCreateOpex(true)}>
                     Create OPEX
                   </button>
                 </div>
@@ -845,7 +848,7 @@ const CampaignsPage = () => {
                     return (
                       <div
                         key={o.id}
-                        className={`border border-border rounded-md p-3 flex items-start justify-between gap-3 ${
+                        className={`border border-border/70 rounded-md p-3 flex items-start justify-between gap-3 ${
                           checked ? "bg-border/20" : ""
                         }`}
                       >
@@ -874,14 +877,14 @@ const CampaignsPage = () => {
                 </div>
               </div>
 
-              <div className="border border-border rounded-lg p-3 space-y-3">
+              <div className="border border-border/70 rounded-lg p-3 space-y-3">
                 <h4 className="font-semibold">Attached to this campaign</h4>
                 <div className="space-y-2 max-h-[60vh] overflow-auto">
                   {selectedOpex.length === 0 && <div className="text-sm text-muted">No OPEX linked.</div>}
                   {selectedOpex.map((id) => {
                     const item = opexList.find((o) => o.id === id) || attachedOpexDetails.find((o) => o.id === id);
                     return (
-                      <div key={id} className="border border-border rounded-md p-3 flex items-start justify-between gap-3">
+                      <div key={id} className="border border-border/70 rounded-md p-3 flex items-start justify-between gap-3">
                         <div>
                           <div className="font-semibold">{item?.name || "Unknown OPEX"}</div>
                           <div className="text-xs text-muted">
@@ -893,7 +896,7 @@ const CampaignsPage = () => {
                           {!item && <div className="text-xs text-muted">missing id: {id}</div>}
                         </div>
                         <button
-                          className="px-3 py-1 rounded-md border border-border text-sm text-muted hover:text-text"
+                          className="px-3 py-1 rounded-md border border-border/60 text-sm text-muted hover:text-text"
                           onClick={() => setSelectedOpex((prev) => prev.filter((oid) => oid !== id))}
                         >
                           Remove
@@ -906,11 +909,11 @@ const CampaignsPage = () => {
             </div>
 
             <div className="flex justify-end gap-2">
-              <button className="px-4 py-2 rounded-md border border-border text-muted" onClick={() => setShowOpexModal(false)}>
+              <button className="px-4 py-2 rounded-md border border-border/60 text-muted" onClick={() => setShowOpexModal(false)}>
                 Close
               </button>
               <button
-                className="px-4 py-2 rounded-md bg-accent text-black font-semibold"
+                className="px-4 py-2 rounded-md bg-accent text-bg font-semibold"
                 onClick={() => setShowOpexModal(false)}
               >
                 Save
@@ -920,7 +923,7 @@ const CampaignsPage = () => {
         </div>
       )}
       {showCreateOpex && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg/85">
           <div className="bg-surface rounded-lg shadow-xl w-full max-w-xl p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Create OPEX</h3>
@@ -932,7 +935,7 @@ const CampaignsPage = () => {
               <div>
                 <label className="text-xs text-muted">Name</label>
                 <input
-                  className="mt-1 w-full bg-bg border border-border rounded px-3 py-2"
+                  className="mt-1 w-full bg-surface border border-border/70 rounded px-3 py-2"
                   value={opexForm.name}
                   onChange={(e) => setOpexForm((p) => ({ ...p, name: e.target.value }))}
                 />
@@ -940,7 +943,7 @@ const CampaignsPage = () => {
               <div>
                 <label className="text-xs text-muted">Category</label>
                 <input
-                  className="mt-1 w-full bg-bg border border-border rounded px-3 py-2"
+                  className="mt-1 w-full bg-surface border border-border/70 rounded px-3 py-2"
                   value={opexForm.category}
                   onChange={(e) => setOpexForm((p) => ({ ...p, category: e.target.value }))}
                 />
@@ -949,7 +952,7 @@ const CampaignsPage = () => {
                 <label className="text-xs text-muted">Cost ({currency})</label>
                 <input
                   type="number"
-                  className="mt-1 w-full bg-bg border border-border rounded px-3 py-2"
+                  className="mt-1 w-full bg-surface border border-border/70 rounded px-3 py-2"
                   value={opexForm.cost_bdt}
                   onChange={(e) => setOpexForm((p) => ({ ...p, cost_bdt: e.target.value }))}
                 />
@@ -958,7 +961,7 @@ const CampaignsPage = () => {
                 <label className="text-xs text-muted">Start month</label>
                 <input
                   type="month"
-                  className="mt-1 w-full bg-bg border border-border rounded px-3 py-2"
+                  className="mt-1 w-full bg-surface border border-border/70 rounded px-3 py-2"
                   value={opexForm.start_month}
                   onChange={(e) => setOpexForm((p) => ({ ...p, start_month: e.target.value }))}
                 />
@@ -967,7 +970,7 @@ const CampaignsPage = () => {
                 <label className="text-xs text-muted">End month</label>
                 <input
                   type="month"
-                  className="mt-1 w-full bg-bg border border-border rounded px-3 py-2"
+                  className="mt-1 w-full bg-surface border border-border/70 rounded px-3 py-2"
                   value={opexForm.end_month}
                   onChange={(e) => setOpexForm((p) => ({ ...p, end_month: e.target.value }))}
                 />
@@ -983,7 +986,7 @@ const CampaignsPage = () => {
               <div className="md:col-span-2">
                 <label className="text-xs text-muted">Notes</label>
                 <textarea
-                  className="mt-1 w-full bg-bg border border-border rounded px-3 py-2"
+                  className="mt-1 w-full bg-surface border border-border/70 rounded px-3 py-2"
                   rows={2}
                   value={opexForm.notes}
                   onChange={(e) => setOpexForm((p) => ({ ...p, notes: e.target.value }))}
@@ -991,11 +994,11 @@ const CampaignsPage = () => {
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <button className="px-4 py-2 rounded-md border border-border text-muted" onClick={() => setShowCreateOpex(false)}>
+              <button className="px-4 py-2 rounded-md border border-border/60 text-muted" onClick={() => setShowCreateOpex(false)}>
                 Cancel
               </button>
               <button
-                className="px-4 py-2 rounded-md bg-accent text-black font-semibold"
+                className="px-4 py-2 rounded-md bg-accent text-bg font-semibold"
                 onClick={() => createOpexMut.mutate(opexForm)}
               >
                 Save
@@ -1006,7 +1009,7 @@ const CampaignsPage = () => {
       )}
 
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg/85">
           <div className="bg-surface rounded-lg shadow-xl w-full max-w-lg p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Create Campaign</h3>
@@ -1018,7 +1021,7 @@ const CampaignsPage = () => {
               <div>
                 <label className="text-xs text-muted">Name</label>
                 <input
-                  className="mt-1 w-full bg-bg border border-border rounded px-3 py-2"
+                  className="mt-1 w-full bg-surface border border-border/70 rounded px-3 py-2"
                   value={newCamp.name}
                   onChange={(e) => setNewCamp((p) => ({ ...p, name: e.target.value }))}
                 />
@@ -1027,7 +1030,7 @@ const CampaignsPage = () => {
                 <label className="text-xs text-muted">Start</label>
                 <input
                   type="date"
-                  className="mt-1 w-full bg-bg border border-border rounded px-3 py-2"
+                  className="mt-1 w-full bg-surface border border-border/70 rounded px-3 py-2"
                   value={newCamp.start_date}
                   onChange={(e) => setNewCamp((p) => ({ ...p, start_date: e.target.value }))}
                 />
@@ -1036,17 +1039,17 @@ const CampaignsPage = () => {
                 <label className="text-xs text-muted">End</label>
                 <input
                   type="date"
-                  className="mt-1 w-full bg-bg border border-border rounded px-3 py-2"
+                  className="mt-1 w-full bg-surface border border-border/70 rounded px-3 py-2"
                   value={newCamp.end_date}
                   onChange={(e) => setNewCamp((p) => ({ ...p, end_date: e.target.value }))}
                 />
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <button className="px-4 py-2 rounded-md border border-border text-muted" onClick={() => setShowCreate(false)}>
+              <button className="px-4 py-2 rounded-md border border-border/60 text-muted" onClick={() => setShowCreate(false)}>
                 Cancel
               </button>
-              <button className="px-4 py-2 rounded-md bg-accent text-black font-semibold" onClick={createCampaignHandler}>
+              <button className="px-4 py-2 rounded-md bg-accent text-bg font-semibold" onClick={createCampaignHandler}>
                 Create
               </button>
             </div>
@@ -1054,7 +1057,7 @@ const CampaignsPage = () => {
         </div>
       )}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg/85">
           <div className="bg-surface rounded-lg shadow-xl w-full max-w-md p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Delete campaign?</h3>
@@ -1066,11 +1069,11 @@ const CampaignsPage = () => {
               This will remove the campaign and its linked inputs. This action cannot be undone.
             </p>
             <div className="flex justify-end gap-2">
-              <button className="px-4 py-2 rounded-md border border-border text-muted" onClick={() => setShowDeleteModal(false)}>
+              <button className="px-4 py-2 rounded-md border border-border/60 text-muted" onClick={() => setShowDeleteModal(false)}>
                 Cancel
               </button>
               <button
-                className="px-4 py-2 rounded-md bg-red-500 text-white font-semibold"
+                className="px-4 py-2 rounded-md bg-red-500 text-text font-semibold"
                 onClick={confirmDelete}
                 disabled={deleteCampMut.isLoading}
               >
@@ -1082,7 +1085,7 @@ const CampaignsPage = () => {
       )}
 
       {sizeWarning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg/85">
           <div className="bg-surface rounded-lg shadow-xl w-full max-w-md p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Size breakdown limit</h3>
@@ -1094,7 +1097,7 @@ const CampaignsPage = () => {
               {sizeWarning.productName || "Product"} has a total quantity of {sizeWarning.total}. Size allocations cannot exceed this.
             </p>
             <div className="flex justify-end">
-              <button className="px-4 py-2 rounded-md bg-accent text-black font-semibold" onClick={() => setSizeWarning(null)}>
+              <button className="px-4 py-2 rounded-md bg-accent text-bg font-semibold" onClick={() => setSizeWarning(null)}>
                 Understood
               </button>
             </div>
@@ -1106,3 +1109,6 @@ const CampaignsPage = () => {
 };
 
 export default CampaignsPage;
+
+
+

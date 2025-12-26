@@ -4,12 +4,12 @@ import { routes } from "../../routes/routes";
 
 const Sidebar = ({ onCollapse }) => {
   return (
-    <aside className="w-64 bg-surface border-r border-border p-4 hidden md:flex md:flex-col transition-all duration-200">
+    <aside className="w-64 bg-surface border-r border-border/60 p-5 hidden md:flex md:flex-col transition-all duration-200 shadow-xl shadow-black/30">
       <div className="flex items-center justify-between mb-4">
-        <div className="text-xl font-semibold">DeenWise</div>
+        <div className="flex flex-col"><span className="text-xs uppercase tracking-[0.25em] text-muted">DeenWise</span><span className="text-lg font-semibold text-text">Executive Suite</span></div>
         <button
           onClick={onCollapse}
-          className="h-9 w-9 rounded-md border border-border text-muted hover:text-text hover:border-text transition-colors flex items-center justify-center"
+          className="h-9 w-9 rounded-md border border-border/70 text-muted hover:text-text hover:border-text transition-colors flex items-center justify-center"
           aria-label="Collapse navigation"
         >
           ‹
@@ -38,3 +38,4 @@ const Sidebar = ({ onCollapse }) => {
 };
 
 export default Sidebar;
+

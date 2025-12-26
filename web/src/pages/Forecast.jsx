@@ -130,7 +130,7 @@ const InfoTooltip = ({ text }) => {
 };
 
 const Card = ({ title, value, subtitle, help }) => (
-  <div className="bg-card border border-border/60 rounded-xl p-4 flex h-full flex-col gap-2 shadow-sm">
+  <div className="bg-card card-standout border border-border/60 rounded-xl p-4 flex h-full flex-col gap-2 shadow-sm">
     <div className="flex items-start justify-between gap-2">
       <div className="text-sm text-muted leading-snug whitespace-normal break-words">{title}</div>
       {help && <InfoTooltip text={help} />}
@@ -545,30 +545,30 @@ const ForecastPage = () => {
         : baseRevenue - totalDeductions;
     const segments = economicsBasis === "effective"
       ? [
-          { key: "manufacturing", label: "Manufacturing Cost", value: manufacturing, color: "#6b7280" },
-          { key: "packaging", label: "Packaging Cost", value: packaging, color: "#9ca3af" },
-          { key: "marketing", label: "Marketing Cost", value: marketing, color: "#b45309" },
-          { key: "opex", label: "OPEX", value: opex, color: "#92400e" },
+          { key: "manufacturing", label: "Manufacturing Cost", value: manufacturing, color: "var(--color-manufacturing)" },
+          { key: "packaging", label: "Packaging Cost", value: packaging, color: "var(--color-packaging)" },
+          { key: "marketing", label: "Marketing Cost", value: marketing, color: "var(--color-marketing)" },
+          { key: "opex", label: "OPEX", value: opex, color: "var(--color-opex)" },
           {
             key: "profit",
             label: "Net Profit (as % of Effective)",
             value: profit,
-            color: "#10b981",
+            color: "var(--color-profit)",
             isProfit: true,
           },
         ]
       : [
-          { key: "manufacturing", label: "Manufacturing Cost", value: manufacturing, color: "#6b7280" },
-          { key: "packaging", label: "Packaging Cost", value: packaging, color: "#9ca3af" },
-          { key: "marketing", label: "Marketing Cost", value: marketing, color: "#b45309" },
-          { key: "opex", label: "OPEX", value: opex, color: "#92400e" },
-          { key: "discounts", label: "Discount Impact", value: discountImpact, color: "#f59e0b" },
-          { key: "returns", label: "Returns Impact", value: returnsImpact, color: "#ef4444" },
+          { key: "manufacturing", label: "Manufacturing Cost", value: manufacturing, color: "var(--color-manufacturing)" },
+          { key: "packaging", label: "Packaging Cost", value: packaging, color: "var(--color-packaging)" },
+          { key: "marketing", label: "Marketing Cost", value: marketing, color: "var(--color-marketing)" },
+          { key: "opex", label: "OPEX", value: opex, color: "var(--color-opex)" },
+          { key: "discounts", label: "Discount Impact", value: discountImpact, color: "var(--color-discount)" },
+          { key: "returns", label: "Returns Impact", value: returnsImpact, color: "var(--color-returns)" },
           {
             key: "profit",
             label: "Net Profit (as % of Gross)",
             value: profit,
-            color: "#10b981",
+            color: "var(--color-profit)",
             isProfit: true,
           },
         ];
@@ -1005,15 +1005,15 @@ const ForecastPage = () => {
             <>
               <div className="flex flex-wrap items-center gap-4 text-xs text-muted">
                 <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-sm bg-sky-300" />
+                  <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "var(--color-gross)" }} />
                   <span>Gross Revenue</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-sm bg-emerald-400" />
+                  <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "var(--color-effective)" }} />
                   <span>Effective Revenue</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-sm bg-amber-500" />
+                  <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "var(--color-cost-total)" }} />
                   <span>Total Cost</span>
                 </div>
               </div>
@@ -1027,12 +1027,12 @@ const ForecastPage = () => {
                         barCategoryGap="12%"
                         barGap={4}
                       >
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-accent-15)" />
                         <XAxis
                           dataKey="product_name"
-                          tick={{ fill: "rgba(148,163,184,0.9)", fontSize: 11 }}
-                          axisLine={{ stroke: "rgba(148,163,184,0.5)" }}
-                          tickLine={{ stroke: "rgba(148,163,184,0.5)" }}
+                          tick={{ fill: "var(--color-accent-2)", fontSize: 11 }}
+                          axisLine={{ stroke: "var(--color-border)" }}
+                          tickLine={{ stroke: "var(--color-border)" }}
                           interval={0}
                           tickMargin={8}
                         />
@@ -1040,52 +1040,52 @@ const ForecastPage = () => {
                           domain={[0, productBarDomain.max]}
                           ticks={productBarDomain.ticks}
                           tickFormatter={(val) => fmt(val, currency)}
-                          tick={{ fill: "rgba(148,163,184,0.9)", fontSize: 11 }}
-                          axisLine={{ stroke: "rgba(148,163,184,0.5)" }}
-                          tickLine={{ stroke: "rgba(148,163,184,0.5)" }}
+                          tick={{ fill: "var(--color-accent-2)", fontSize: 11 }}
+                          axisLine={{ stroke: "var(--color-border)" }}
+                          tickLine={{ stroke: "var(--color-border)" }}
                           width={72}
                         />
                     <Tooltip
                       formatter={(val, name) => [fmt(val, currency), name]}
                       contentStyle={{
-                        background: "rgba(15,23,42,0.95)",
-                        borderColor: "rgba(148,163,184,0.4)",
+                        background: "var(--color-surface)",
+                        borderColor: "var(--color-border)",
                       }}
-                      labelStyle={{ color: "#e2e8f0" }}
-                      itemStyle={{ color: "#e2e8f0" }}
+                      labelStyle={{ color: "var(--color-text)" }}
+                      itemStyle={{ color: "var(--color-text)" }}
                       shared={false}
-                      cursor={{ fill: "rgba(148,163,184,0.08)" }}
+                      cursor={{ fill: "var(--color-accent-15)" }}
                     />
-                    <Bar dataKey="gross" name="Gross Revenue" fill="#7dd3fc" barSize={26} maxBarSize={28}>
+                    <Bar dataKey="gross" name="Gross Revenue" fill="var(--color-gross)" barSize={26} maxBarSize={28}>
                       <LabelList
                         dataKey="gross"
                         position="top"
                         formatter={(val) => fmt(val, currency)}
-                        fill="rgba(226,232,240,0.9)"
+                        fill="var(--color-accent)"
                         fontSize={10}
                         offset={28}
                         angle={-90}
                         textAnchor="middle"
                       />
                     </Bar>
-                    <Bar dataKey="effective" name="Effective Revenue" fill="#34d399" barSize={26} maxBarSize={28}>
+                    <Bar dataKey="effective" name="Effective Revenue" fill="var(--color-effective)" barSize={26} maxBarSize={28}>
                       <LabelList
                         dataKey="effective"
                         position="top"
                         formatter={(val) => fmt(val, currency)}
-                        fill="rgba(226,232,240,0.9)"
+                        fill="var(--color-accent)"
                         fontSize={10}
                         offset={28}
                         angle={-90}
                         textAnchor="middle"
                       />
                     </Bar>
-                    <Bar dataKey="totalCost" name="Total Cost" fill="rgba(245,158,11,0.8)" barSize={26} maxBarSize={28}>
+                    <Bar dataKey="totalCost" name="Total Cost" fill="var(--color-cost-total)" barSize={26} maxBarSize={28}>
                       <LabelList
                         dataKey="totalCost"
                         position="top"
                         formatter={(val) => fmt(val, currency)}
-                        fill="rgba(226,232,240,0.9)"
+                        fill="var(--color-accent)"
                         fontSize={10}
                         offset={28}
                         angle={-90}
@@ -1276,11 +1276,11 @@ const ForecastPage = () => {
               <div className="grid grid-cols-1 gap-3 text-xs text-muted">
                 <div className="flex flex-wrap items-center gap-4">
                   <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-sm bg-amber-500" />
+                    <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "var(--color-cost-total)" }} />
                     <span>Unit Cost (Fully Loaded)</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-sm bg-emerald-400" />
+                    <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "var(--color-profit)" }} />
                     <span>Unit Profit</span>
                   </div>
                 </div>
@@ -1297,19 +1297,19 @@ const ForecastPage = () => {
                       </div>
                       <div className="h-3 w-full rounded-full bg-border/40 overflow-hidden flex">
                         <div
-                          className="h-full bg-amber-500/70"
-                          style={{ width: `${costPct}%` }}
+                          className="h-full"
+                          style={{ width: `${costPct}%`, backgroundColor: "var(--color-cost-total)", opacity: 0.8 }}
                           title={`Unit Cost (Fully Loaded): ${fmt(row.totalCost, currency)}`}
                         />
                         <div
-                          className="h-full bg-emerald-400/80"
-                          style={{ width: `${profitPct}%` }}
+                          className="h-full"
+                          style={{ width: `${profitPct}%`, backgroundColor: "var(--color-profit)", opacity: 0.85 }}
                           title={`Unit Profit: ${fmt(row.profit, currency)}`}
                         />
                       </div>
                       <div className="flex items-center justify-between text-[11px] text-muted">
-                        <span className="text-amber-500">{costPct.toFixed(1)}% Cost</span>
-                        <span className="text-emerald-400">{profitPct.toFixed(1)}% Profit</span>
+                        <span style={{ color: "var(--color-cost-total)" }}>{costPct.toFixed(1)}% Cost</span>
+                        <span style={{ color: "var(--color-profit)" }}>{profitPct.toFixed(1)}% Profit</span>
                       </div>
                     </div>
                   );
@@ -1440,7 +1440,10 @@ const ForecastPage = () => {
                       <div key={seg.key} className="space-y-1">
                         <div className="flex items-center justify-between">
                           <span className="text-text">{seg.label}</span>
-                          <span className={seg.isProfit ? "text-emerald-600 font-medium" : ""}>
+                          <span
+                            className={seg.isProfit ? "font-medium" : ""}
+                            style={seg.isProfit ? { color: "var(--color-profit)" } : undefined}
+                          >
                             {pct(seg.pctDisplay * 100)} ({fmt(seg.value, currency)})
                           </span>
                         </div>
@@ -1449,7 +1452,7 @@ const ForecastPage = () => {
                             className="h-full"
                             style={{
                               width: `${seg.pctDisplay * 100}%`,
-                              backgroundColor: seg.isProfit ? "#10b981" : seg.color,
+                              backgroundColor: seg.isProfit ? "var(--color-profit)" : seg.color,
                             }}
                           />
                         </div>
@@ -1514,13 +1517,13 @@ const ForecastPage = () => {
                     <div className="text-center" style={{ width: `${costPct * 100}%` }}>
                       {pct(costPct * 100)} <span className="text-muted">(Cost)</span>
                     </div>
-                    <div className="text-center text-emerald-600" style={{ width: `${profitPct * 100}%` }}>
+                    <div className="text-center" style={{ width: `${profitPct * 100}%`, color: "var(--color-profit)" }}>
                       {pct(profitPct * 100)} <span className="text-muted">(Profit)</span>
                     </div>
                   </div>
                   <div className="flex h-2 rounded-full bg-border/40 overflow-hidden">
-                    <div className="h-full bg-slate-500/80" style={{ width: `${costPct * 100}%` }} />
-                    <div className="h-full bg-emerald-400/80" style={{ width: `${profitPct * 100}%` }} />
+                    <div className="h-full" style={{ width: `${costPct * 100}%`, backgroundColor: "var(--color-accent-35)", opacity: 0.8 }} />
+                    <div className="h-full" style={{ width: `${profitPct * 100}%`, backgroundColor: "var(--color-profit)", opacity: 0.85 }} />
                   </div>
                 </div>
               </div>
@@ -1536,3 +1539,10 @@ const ForecastPage = () => {
 };
 
 export default ForecastPage;
+
+
+
+
+
+
+
