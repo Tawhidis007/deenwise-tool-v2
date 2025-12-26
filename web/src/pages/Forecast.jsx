@@ -41,6 +41,36 @@ const pct = (val) => {
   return `${Number(val).toFixed(1)}%`;
 };
 
+const polarToCartesian = (cx, cy, r, angleDeg) => {
+  const rad = ((angleDeg - 90) * Math.PI) / 180.0;
+  return {
+    x: cx + r * Math.cos(rad),
+    y: cy + r * Math.sin(rad),
+  };
+};
+
+const describePieSlice = (cx, cy, r, startAngle, endAngle) => {
+  const start = polarToCartesian(cx, cy, r, endAngle);
+  const end = polarToCartesian(cx, cy, r, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+  return `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArcFlag} 0 ${end.x} ${end.y} Z`;
+};
+
+const describeDonutSlice = (cx, cy, r, ir, startAngle, endAngle) => {
+  const startOuter = polarToCartesian(cx, cy, r, endAngle);
+  const endOuter = polarToCartesian(cx, cy, r, startAngle);
+  const startInner = polarToCartesian(cx, cy, ir, startAngle);
+  const endInner = polarToCartesian(cx, cy, ir, endAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+  return [
+    `M ${startOuter.x} ${startOuter.y}`,
+    `A ${r} ${r} 0 ${largeArcFlag} 0 ${endOuter.x} ${endOuter.y}`,
+    `L ${startInner.x} ${startInner.y}`,
+    `A ${ir} ${ir} 0 ${largeArcFlag} 1 ${endInner.x} ${endInner.y}`,
+    "Z",
+  ].join(" ");
+};
+
 const Card = ({ title, value, subtitle }) => (
   <div className="bg-card border border-border/60 rounded-xl p-4 flex flex-col gap-1 shadow-sm">
     <div className="text-sm text-muted">{title}</div>
@@ -392,6 +422,43 @@ const ForecastPage = () => {
     return { ...sums, discountImpact, returnsImpact };
   }, [productSummary, inputs, productMap]);
 
+  const revenueAllocation = React.useMemo(() => {
+    const gross = Number(grossRevenue || 0);
+    const overrides = inputs?.product_overrides || {};
+    let manufacturing = 0;
+    let packaging = 0;
+    productSummary.forEach((p) => {
+      const base = productMap[p.product_id];
+      if (!base) return;
+      const qty = Number(p.campaign_qty || 0);
+      manufacturing += Number(base.manufacturing_cost_bdt || 0) * qty;
+      const ov = overrides[p.product_id] || {};
+      const packagingCost = Number(ov.packaging_cost_bdt ?? base.packaging_cost_bdt ?? 0);
+      packaging += packagingCost * qty;
+    });
+    const marketing = Number(marketingCalc.marketingTotalFinal || 0);
+    const opex = Number(opexTotal || 0);
+    const discountImpact = Number(discountsImpact.discountImpact || 0);
+    const returnsImpact = Number(discountsImpact.returnsImpact || 0);
+    const totalDeductions =
+      manufacturing + packaging + marketing + opex + discountImpact + returnsImpact;
+    const profit = gross - totalDeductions;
+    const segments = [
+      { key: "manufacturing", label: "Manufacturing Cost", value: manufacturing, color: "#6b7280" },
+      { key: "packaging", label: "Packaging Cost", value: packaging, color: "#9ca3af" },
+      { key: "marketing", label: "Marketing Cost", value: marketing, color: "#b45309" },
+      { key: "opex", label: "OPEX", value: opex, color: "#92400e" },
+      { key: "discounts", label: "Discount Impact", value: discountImpact, color: "#f59e0b" },
+      { key: "returns", label: "Returns Impact", value: returnsImpact, color: "#ef4444" },
+      { key: "profit", label: "Net Profit (as % of Gross)", value: profit, color: "#10b981", isProfit: true },
+    ];
+    const normalized = segments.map((segment) => ({
+      ...segment,
+      pct: gross > 0 ? segment.value / gross : 0,
+    }));
+    return { gross, segments: normalized };
+  }, [grossRevenue, inputs, productSummary, productMap, marketingCalc, opexTotal, discountsImpact]);
+
   const sizeRowsAdjusted = React.useMemo(() => {
     if (!sizeRows.length || !productSummary.length) return [];
 
@@ -545,6 +612,19 @@ const ForecastPage = () => {
     if (pulseFilter === "all") return pulseData;
     return pulseData.filter((m) => m.month === pulseFilter);
   }, [pulseData, pulseFilter]);
+
+  const allocationSlices = React.useMemo(() => {
+    const segments = revenueAllocation.segments;
+    const totalPct = segments.reduce((sum, seg) => sum + Math.max(0, seg.pct), 0) || 1;
+    let cursor = 0;
+    return segments.map((seg) => {
+      const pctDisplay = Math.max(0, seg.pct) / totalPct;
+      const startAngle = cursor * 360;
+      const endAngle = (cursor + pctDisplay) * 360;
+      cursor += pctDisplay;
+      return { ...seg, pctDisplay, startAngle, endAngle };
+    });
+  }, [revenueAllocation]);
 
   return (
     <div className="p-6 space-y-6">
@@ -908,8 +988,43 @@ const ForecastPage = () => {
       </div>
 
       <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-4">
+        <div className="text-lg font-semibold text-text">Visual Pulse</div>
+        <div className="text-sm text-muted">Top-line performance and profitability at a glance.</div>
+        <div className="pt-2 space-y-3">
+          <div className="text-base font-semibold text-text">Gross Revenue Economics</div>
+          <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+            <div className="border border-border/60 rounded-lg p-4 bg-surface space-y-3">
+              <div className="text-sm font-semibold text-muted">Gross Revenue Allocation (100% of Gross)</div>
+              <div className="flex flex-col md:flex-row md:items-center gap-4">
+                <svg viewBox="0 0 180 180" className="h-48 w-48 shrink-0">
+                  {allocationSlices.map((seg) => (
+                    <path
+                      key={seg.key}
+                      d={describePieSlice(90, 90, 70, seg.startAngle, seg.endAngle)}
+                      fill={seg.color}
+                    >
+                      <title>
+                        {seg.label}: {fmt(seg.value, currency)} ({pct(seg.pctDisplay * 100)})
+                      </title>
+                    </path>
+                  ))}
+                </svg>
+                <div className="space-y-1 text-sm text-muted">
+                  {allocationSlices.map((seg) => (
+                    <div key={seg.key} className="flex items-center justify-between gap-4">
+                      <span className="text-text">{seg.label}</span>
+                      <span className={seg.isProfit ? "text-emerald-600 font-medium" : ""}>
+                        {pct(seg.pctDisplay * 100)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
         <div className="flex items-center justify-between gap-3">
-          <div className="text-lg font-semibold text-text">Visual Pulse</div>
+          <div className="text-base font-semibold text-text">Effective Revenue Split (Cost vs Profit)</div>
           <div className="flex items-center gap-2">
             <label className="text-xs text-muted">Period</label>
             <select
@@ -927,7 +1042,6 @@ const ForecastPage = () => {
             </select>
           </div>
         </div>
-        <div className="text-sm text-muted">Revenue, profit, margin, and volume at a glance.</div>
         <div className="space-y-3">
           {pulseFiltered.map((m) => {
             const margin = m.revenue ? (m.profit / m.revenue) * 100 : 0;
