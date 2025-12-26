@@ -152,6 +152,7 @@ const ForecastPage = () => {
   const [showUnitDefs, setShowUnitDefs] = React.useState(false);
   const [showImpactDefs, setShowImpactDefs] = React.useState(false);
   const [showForecastChart, setShowForecastChart] = React.useState(true);
+  const [economicsBasis, setEconomicsBasis] = React.useState("gross");
 
   const { data: campaigns = [] } = useQuery({
     queryKey: ["campaigns"],
@@ -492,6 +493,8 @@ const ForecastPage = () => {
 
   const revenueAllocation = React.useMemo(() => {
     const gross = Number(grossRevenue || 0);
+    const effective = Number(effectiveRevenue || 0);
+    const baseRevenue = economicsBasis === "effective" ? effective : gross;
     const overrides = inputs?.product_overrides || {};
     let manufacturing = 0;
     let packaging = 0;
@@ -510,22 +513,56 @@ const ForecastPage = () => {
     const returnsImpact = Number(discountsImpact.returnsImpact || 0);
     const totalDeductions =
       manufacturing + packaging + marketing + opex + discountImpact + returnsImpact;
-    const profit = gross - totalDeductions;
-    const segments = [
-      { key: "manufacturing", label: "Manufacturing Cost", value: manufacturing, color: "#6b7280" },
-      { key: "packaging", label: "Packaging Cost", value: packaging, color: "#9ca3af" },
-      { key: "marketing", label: "Marketing Cost", value: marketing, color: "#b45309" },
-      { key: "opex", label: "OPEX", value: opex, color: "#92400e" },
-      { key: "discounts", label: "Discount Impact", value: discountImpact, color: "#f59e0b" },
-      { key: "returns", label: "Returns Impact", value: returnsImpact, color: "#ef4444" },
-      { key: "profit", label: "Net Profit (as % of Gross)", value: profit, color: "#10b981", isProfit: true },
-    ];
+    const effectiveDeductions = manufacturing + packaging + marketing + opex;
+    const profit =
+      economicsBasis === "effective"
+        ? baseRevenue - effectiveDeductions
+        : baseRevenue - totalDeductions;
+    const segments = economicsBasis === "effective"
+      ? [
+          { key: "manufacturing", label: "Manufacturing Cost", value: manufacturing, color: "#6b7280" },
+          { key: "packaging", label: "Packaging Cost", value: packaging, color: "#9ca3af" },
+          { key: "marketing", label: "Marketing Cost", value: marketing, color: "#b45309" },
+          { key: "opex", label: "OPEX", value: opex, color: "#92400e" },
+          {
+            key: "profit",
+            label: "Net Profit (as % of Effective)",
+            value: profit,
+            color: "#10b981",
+            isProfit: true,
+          },
+        ]
+      : [
+          { key: "manufacturing", label: "Manufacturing Cost", value: manufacturing, color: "#6b7280" },
+          { key: "packaging", label: "Packaging Cost", value: packaging, color: "#9ca3af" },
+          { key: "marketing", label: "Marketing Cost", value: marketing, color: "#b45309" },
+          { key: "opex", label: "OPEX", value: opex, color: "#92400e" },
+          { key: "discounts", label: "Discount Impact", value: discountImpact, color: "#f59e0b" },
+          { key: "returns", label: "Returns Impact", value: returnsImpact, color: "#ef4444" },
+          {
+            key: "profit",
+            label: "Net Profit (as % of Gross)",
+            value: profit,
+            color: "#10b981",
+            isProfit: true,
+          },
+        ];
     const normalized = segments.map((segment) => ({
       ...segment,
-      pct: gross > 0 ? segment.value / gross : 0,
+      pct: baseRevenue > 0 ? segment.value / baseRevenue : 0,
     }));
-    return { gross, segments: normalized };
-  }, [grossRevenue, inputs, productSummary, productMap, marketingCalc, opexTotal, discountsImpact]);
+    return { baseRevenue, segments: normalized };
+  }, [
+    grossRevenue,
+    effectiveRevenue,
+    economicsBasis,
+    inputs,
+    productSummary,
+    productMap,
+    marketingCalc,
+    opexTotal,
+    discountsImpact,
+  ]);
 
   const sizeRowsAdjusted = React.useMemo(() => {
     if (!sizeRows.length || !productSummary.length) return [];
@@ -1268,10 +1305,34 @@ const ForecastPage = () => {
         <div className="text-lg font-semibold text-text">Visual Pulse</div>
         <div className="text-sm text-muted">Top-line performance and profitability at a glance.</div>
         <div className="pt-2 space-y-3">
-          <div className="text-base font-semibold text-text">Gross Revenue Economics</div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-base font-semibold text-text">
+              {economicsBasis === "effective" ? "Effective Revenue Economics" : "Gross Revenue Economics"}
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-muted">Basis</label>
+              <div className="flex flex-col items-end gap-1">
+                <select
+                  className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text"
+                  value={economicsBasis}
+                  onChange={(e) => setEconomicsBasis(e.target.value)}
+                >
+                  <option value="gross">Gross Revenue</option>
+                  <option value="effective">Effective Revenue</option>
+                </select>
+                <div className="text-[11px] text-muted">
+                  {economicsBasis === "effective" ? "After discounts and returns" : "Before discounts and returns"}
+                </div>
+              </div>
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
             <div className="border border-border/60 rounded-lg p-4 bg-surface space-y-3">
-              <div className="text-sm font-semibold text-muted">Gross Revenue Allocation (100% of Gross)</div>
+              <div className="text-sm font-semibold text-muted">
+                {economicsBasis === "effective"
+                  ? "Effective Revenue Allocation (100% of Effective)"
+                  : "Gross Revenue Allocation (100% of Gross)"}
+              </div>
               <div className="flex flex-col md:flex-row md:items-center md:justify-center gap-6">
                 <svg viewBox="0 0 220 220" className="h-64 w-64 shrink-0">
                   {allocationSlices.map((seg) => (
