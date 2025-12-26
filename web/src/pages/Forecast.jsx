@@ -53,6 +53,8 @@ const ForecastPage = () => {
   const { currency } = useCurrency();
   const [selectedCampaign, setSelectedCampaign] = React.useState(null);
   const [monthFilter, setMonthFilter] = React.useState("all");
+  const [sizeProductFilter, setSizeProductFilter] = React.useState("all");
+  const [impactFilter, setImpactFilter] = React.useState("all");
 
   const { data: campaigns = [] } = useQuery({
     queryKey: ["campaigns"],
@@ -259,30 +261,110 @@ const ForecastPage = () => {
   const productSummary = forecast?.product_summary || [];
   const sizeRows = forecast?.size_breakdown || [];
 
+  const adjustedProductTotals = React.useMemo(() => {
+    if (!productSummary.length) return {};
+
+    const perUnitMarketing = (pid) => {
+      const base = productMap[pid];
+      if (!base) return 0;
+      const ov = (inputs?.product_overrides || {})[pid] || {};
+      return Number(ov.marketing_cost_bdt ?? base.marketing_cost_bdt ?? 0);
+    };
+
+    const rowsWithComponents = productSummary.map((row) => {
+      const mPerUnit = perUnitMarketing(row.product_id);
+      const marketingUsed = Number(row.campaign_qty || 0) * mPerUnit;
+      const baseCost = Number(row.total_cost || 0);
+      const costNoMkt = baseCost - marketingUsed;
+      return { ...row, marketingUsed, costNoMkt };
+    });
+
+    const totalMarketingUsed = rowsWithComponents.reduce((s, r) => s + r.marketingUsed, 0);
+    const totalQty = rowsWithComponents.reduce((s, r) => s + Number(r.campaign_qty || 0), 0);
+
+    const allocMarketing = (row) => {
+      if (totalMarketingUsed > 0) {
+        return (row.marketingUsed / totalMarketingUsed) * marketingCalc.marketingTotalFinal;
+      }
+      if (totalQty > 0) {
+        return (Number(row.campaign_qty || 0) / totalQty) * marketingCalc.marketingTotalFinal;
+      }
+      return 0;
+    };
+
+    const allocOpex = (row) => {
+      if (totalQty > 0) {
+        return (Number(row.campaign_qty || 0) / totalQty) * opexTotal;
+      }
+      return 0;
+    };
+
+    return rowsWithComponents.reduce((acc, row) => {
+      const marketingShare = allocMarketing(row);
+      const opexShare = allocOpex(row);
+      const adjustedCost = row.costNoMkt + marketingShare + opexShare;
+      const adjustedProfit = Number(row.net_profit || 0) + row.marketingUsed - marketingShare - opexShare;
+      acc[row.product_id] = {
+        campaign_qty: Number(row.campaign_qty || 0),
+        effective_revenue: Number(row.effective_revenue || 0),
+        total_cost: adjustedCost,
+        net_profit: adjustedProfit,
+      };
+      return acc;
+    }, {});
+  }, [productSummary, productMap, inputs, marketingCalc, opexTotal]);
+
   const unitBreakdown = React.useMemo(() => {
     if (!productSummary.length) return [];
     return productSummary.map((p) => {
-      const qty = p.campaign_qty || 1;
-      const unitRevenue = qty ? (p.gross_revenue || 0) / qty : 0;
-      const unitCost = qty ? (p.total_cost || 0) / qty : 0;
-      const unitProfit = unitRevenue - unitCost;
+      const adjusted = adjustedProductTotals[p.product_id];
+      const qty = adjusted?.campaign_qty || p.campaign_qty || 1;
+      const base = productMap[p.product_id];
+      const ov = (inputs?.product_overrides || {})[p.product_id] || {};
+      const packaging = Number(ov.packaging_cost_bdt ?? base?.packaging_cost_bdt ?? 0);
+      const manufacturing = Number(base?.manufacturing_cost_bdt ?? 0);
+      const factoryUnitCost = qty ? (packaging + manufacturing) : 0;
+      const unitRevenue = qty ? (adjusted?.effective_revenue ?? p.effective_revenue ?? 0) / qty : 0;
+      const unitCost = qty ? (adjusted?.total_cost ?? p.total_cost ?? 0) / qty : 0;
+      const unitProfit = qty ? (adjusted?.net_profit ?? p.net_profit ?? 0) / qty : 0;
       const unitMargin = unitRevenue ? (unitProfit / unitRevenue) * 100 : 0;
       return {
         ...p,
+        factoryUnitCost,
         unitRevenue,
         unitCost,
         unitProfit,
         unitMargin,
       };
     });
-  }, [productSummary]);
+  }, [productSummary, adjustedProductTotals, productMap, inputs]);
 
   const discountsImpact = React.useMemo(() => {
-    if (!forecast?.product_summary) return { gross: 0, effective: 0, delta: 0 };
-    const gross = forecast.product_summary.reduce((s, p) => s + (p.gross_revenue || 0), 0);
-    const effective = forecast.product_summary.reduce((s, p) => s + (p.effective_revenue || 0), 0);
-    return { gross, effective, delta: gross - effective };
-  }, [forecast]);
+    if (!productSummary.length) {
+      return { gross: 0, effective: 0, discounted: 0, discountImpact: 0, returnsImpact: 0 };
+    }
+    const overrides = inputs?.product_overrides || {};
+    const sums = productSummary.reduce(
+      (acc, p) => {
+        acc.gross += Number(p.gross_revenue || 0);
+        acc.effective += Number(p.effective_revenue || 0);
+        const base = productMap[p.product_id];
+        const ov = overrides[p.product_id] || {};
+        const discountRate = Number(
+          ov.discount_rate ?? base?.discount_rate ?? 0
+        );
+        const price = Number(base?.price_bdt ?? 0);
+        const qty = Number(p.campaign_qty || 0);
+        const discountedRevenue = price * (1 - (discountRate || 0)) * qty;
+        acc.discounted += Number.isNaN(discountedRevenue) ? 0 : discountedRevenue;
+        return acc;
+      },
+      { gross: 0, effective: 0, discounted: 0 }
+    );
+    const discountImpact = sums.gross - sums.discounted;
+    const returnsImpact = sums.discounted - sums.effective;
+    return { ...sums, discountImpact, returnsImpact };
+  }, [productSummary, inputs, productMap]);
 
   const sizeRowsAdjusted = React.useMemo(() => {
     if (!sizeRows.length || !productSummary.length) return [];
@@ -370,6 +452,25 @@ const ForecastPage = () => {
       };
     });
   }, [sizeRows, productSummary, productMap, inputs, marketingCalc, opexTotal]);
+
+  const sizeProductOptions = React.useMemo(() => {
+    if (!sizeRowsAdjusted.length) return [];
+    const map = new Map();
+    sizeRowsAdjusted.forEach((row) => {
+      if (!row.product_id) return;
+      if (!map.has(row.product_id)) {
+        map.set(row.product_id, row.product_name || row.product_id);
+      }
+    });
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [sizeRowsAdjusted]);
+
+  const sizeRowsFiltered = React.useMemo(() => {
+    if (sizeProductFilter === "all") return sizeRowsAdjusted;
+    return sizeRowsAdjusted.filter((row) => row.product_id === sizeProductFilter);
+  }, [sizeRowsAdjusted, sizeProductFilter]);
 
   const pulseData = React.useMemo(() => {
     if (!forecast?.monthly || !forecast.monthly.length) return [];
@@ -514,7 +615,25 @@ const ForecastPage = () => {
       </div>
 
       <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-3">
-        <div className="text-lg font-semibold text-text">Size Breakdown</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-lg font-semibold text-text">Size Breakdown</div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted">Product</label>
+            <select
+              className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text"
+              value={sizeProductFilter}
+              onChange={(e) => setSizeProductFilter(e.target.value)}
+              disabled={!sizeProductOptions.length}
+            >
+              <option value="all">All products</option>
+              {sizeProductOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
         <div className="bg-surface border border-border/60 rounded-lg p-3 text-xs text-muted space-y-2">
           <div className="text-sm font-semibold text-text">Cost Definitions</div>
           <div>
@@ -550,7 +669,7 @@ const ForecastPage = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {sizeRowsAdjusted.map((r) => {
+              {sizeRowsFiltered.map((r) => {
                 const margin = r.effective_revenue
                   ? (r.net_profit / r.effective_revenue) * 100
                   : 0;
@@ -567,7 +686,7 @@ const ForecastPage = () => {
                   </tr>
                 );
               })}
-              {!sizeRowsAdjusted.length && (
+              {!sizeRowsFiltered.length && (
                 <tr>
                   <td className="py-3 text-muted" colSpan={8}>
                     No size-level data.
@@ -581,13 +700,25 @@ const ForecastPage = () => {
 
       <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-3">
         <div className="text-lg font-semibold text-text">Unit Breakdown</div>
+        <div className="bg-surface border border-border/60 rounded-lg p-3 text-xs text-muted space-y-2">
+          <div className="text-sm font-semibold text-text">Unit Metric Definitions</div>
+          <div>
+            <span className="font-medium text-text">Factory Unit Cost</span> Direct cost to produce a single unit
+            (manufacturing + packaging). Excludes marketing and operational overheads.
+          </div>
+          <div>
+            <span className="font-medium text-text">Unit Cost (Fully Loaded)</span> Factory Unit Cost plus allocated
+            marketing spend and business overheads (OPEX). Represents the true average cost per unit to the business.
+          </div>
+        </div>
         <div className="overflow-auto">
           <table className="min-w-full text-sm">
             <thead className="text-left text-muted border-b border-border/60">
               <tr>
                 <th className="py-2 pr-3">Product</th>
                 <th className="py-2 pr-3">Unit Rev</th>
-                <th className="py-2 pr-3">Unit Cost</th>
+                <th className="py-2 pr-3">Factory Unit Cost</th>
+                <th className="py-2 pr-3">Unit Cost (Fully Loaded)</th>
                 <th className="py-2 pr-3">Unit Profit</th>
                 <th className="py-2 pr-3">Unit Margin</th>
               </tr>
@@ -597,6 +728,7 @@ const ForecastPage = () => {
                 <tr key={r.product_id}>
                   <td className="py-2 pr-3">{r.product_name}</td>
                   <td className="py-2 pr-3">{fmt(r.unitRevenue, currency)}</td>
+                  <td className="py-2 pr-3">{fmt(r.factoryUnitCost, currency)}</td>
                   <td className="py-2 pr-3">{fmt(r.unitCost, currency)}</td>
                   <td className="py-2 pr-3">{fmt(r.unitProfit, currency)}</td>
                   <td className="py-2 pr-3">{pct(r.unitMargin)}</td>
@@ -604,7 +736,7 @@ const ForecastPage = () => {
               ))}
               {!unitBreakdown.length && (
                 <tr>
-                  <td className="py-3 text-muted" colSpan={5}>
+                  <td className="py-3 text-muted" colSpan={6}>
                     No unit metrics yet.
                   </td>
                 </tr>
@@ -615,23 +747,52 @@ const ForecastPage = () => {
       </div>
 
       <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-3">
-        <div className="text-lg font-semibold text-text">Discounts & Returns Impact</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-lg font-semibold text-text">Discounts & Returns Impact</div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted">Filter</label>
+            <select
+              className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-text"
+              value={impactFilter}
+              onChange={(e) => setImpactFilter(e.target.value)}
+            >
+              <option value="all">All</option>
+              <option value="discounts">Discounts only</option>
+              <option value="returns">Returns only</option>
+            </select>
+          </div>
+        </div>
+        <div className="bg-surface border border-border/60 rounded-lg p-3 text-xs text-muted space-y-2">
+          <div className="text-sm font-semibold text-text">Revenue Impact Definitions</div>
+          <div>
+            <span className="font-medium text-text">Discount Impact</span> Revenue reduction due to promotional
+            discounts applied at point of sale.
+          </div>
+          <div>
+            <span className="font-medium text-text">Returns Impact</span> Expected revenue loss from returned units,
+            applied after discounts.
+          </div>
+        </div>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className="text-muted">Gross (no discounts)</span>
+            <span className="text-muted">Gross Revenue (no discounts or returns)</span>
             <span className="font-medium text-text">{fmt(discountsImpact.gross, currency)}</span>
           </div>
+          {impactFilter !== "returns" && (
+            <div className="flex justify-between">
+              <span className="text-muted">Discount Impact</span>
+              <span className="font-medium text-text">{fmt(discountsImpact.discountImpact, currency)}</span>
+            </div>
+          )}
+          {impactFilter !== "discounts" && (
+            <div className="flex justify-between">
+              <span className="text-muted">Returns Impact</span>
+              <span className="font-medium text-text">{fmt(discountsImpact.returnsImpact, currency)}</span>
+            </div>
+          )}
           <div className="flex justify-between">
-            <span className="text-muted">Effective (after discounts/returns)</span>
+            <span className="text-muted">Effective Revenue (after discounts and returns)</span>
             <span className="font-medium text-text">{fmt(discountsImpact.effective, currency)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Discount delta</span>
-            <span className="font-medium text-text">{fmt(discountsImpact.delta, currency)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Returns impact</span>
-            <span className="font-medium text-text">Included in effective revenue</span>
           </div>
         </div>
       </div>
