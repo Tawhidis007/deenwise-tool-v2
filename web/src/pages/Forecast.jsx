@@ -995,12 +995,12 @@ const ForecastPage = () => {
           <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
             <div className="border border-border/60 rounded-lg p-4 bg-surface space-y-3">
               <div className="text-sm font-semibold text-muted">Gross Revenue Allocation (100% of Gross)</div>
-              <div className="flex flex-col md:flex-row md:items-center gap-4">
-                <svg viewBox="0 0 180 180" className="h-48 w-48 shrink-0">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-center gap-6">
+                <svg viewBox="0 0 220 220" className="h-64 w-64 shrink-0">
                   {allocationSlices.map((seg) => (
                     <path
                       key={seg.key}
-                      d={describePieSlice(90, 90, 70, seg.startAngle, seg.endAngle)}
+                      d={describePieSlice(110, 110, 90, seg.startAngle, seg.endAngle)}
                       fill={seg.color}
                     >
                       <title>
@@ -1009,15 +1009,28 @@ const ForecastPage = () => {
                     </path>
                   ))}
                 </svg>
-                <div className="space-y-1 text-sm text-muted">
-                  {allocationSlices.map((seg) => (
-                    <div key={seg.key} className="flex items-center justify-between gap-4">
-                      <span className="text-text">{seg.label}</span>
-                      <span className={seg.isProfit ? "text-emerald-600 font-medium" : ""}>
-                        {pct(seg.pctDisplay * 100)}
-                      </span>
-                    </div>
-                  ))}
+                <div className="w-full max-w-sm space-y-2 text-sm text-muted">
+                  {[...allocationSlices]
+                    .sort((a, b) => b.pctDisplay - a.pctDisplay)
+                    .map((seg) => (
+                      <div key={seg.key} className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-text">{seg.label}</span>
+                          <span className={seg.isProfit ? "text-emerald-600 font-medium" : ""}>
+                            {pct(seg.pctDisplay * 100)} ({fmt(seg.value, currency)})
+                          </span>
+                        </div>
+                        <div className="h-2 rounded-full bg-border/40 overflow-hidden">
+                          <div
+                            className="h-full"
+                            style={{
+                              width: `${seg.pctDisplay * 100}%`,
+                              backgroundColor: seg.isProfit ? "#10b981" : seg.color,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
                 </div>
               </div>
             </div>
