@@ -126,7 +126,6 @@ export const buildCampaignForecast = ({
   }, {});
 
   const monthlyRows = [];
-  const sizeRows = [];
 
   Object.entries(quantities).forEach(([pid, totalQty]) => {
     const qtyNum = Number(totalQty || 0);
@@ -143,25 +142,6 @@ export const buildCampaignForecast = ({
 
     const monthQtys = distributeQuantity(qtyNum, weightsForPid);
     const product = prodMap[pid];
-
-    if (sizeBreakdown && sizeBreakdown[pid]) {
-      const sb = sizeBreakdown[pid];
-      Object.entries(sb).forEach(([size, sqty]) => {
-        const qtyVal = Number(sqty || 0);
-        if (qtyVal <= 0) return;
-        const econ = revenueForProductMonth(product, qtyVal);
-        sizeRows.push({
-          product_id: pid,
-          product_name: product.name,
-          size,
-          qty: qtyVal,
-          gross_revenue: econ.gross_revenue,
-          effective_revenue: econ.effective_revenue,
-          total_cost: econ.total_cost,
-          net_profit: econ.net_profit,
-        });
-      });
-    }
 
     Object.entries(monthQtys).forEach(([month, qty]) => {
       const qVal = Number(qty || 0);
@@ -236,6 +216,36 @@ export const buildCampaignForecast = ({
       net_profit: 0,
     },
   );
+
+  const sizeRows = [];
+  if (sizeBreakdown) {
+    Object.entries(sizeBreakdown).forEach(([pid, sb]) => {
+      if (!productSummaryMap[pid]) return;
+      const productTotals = productSummaryMap[pid];
+      const sizes = sb || {};
+      const totalSizeQty = Object.values(sizes).reduce((sum, val) => sum + Number(val || 0), 0);
+      const productQty = Number(productTotals.campaign_qty || 0);
+      const denomQty = productQty > 0 ? productQty : totalSizeQty;
+      if (denomQty <= 0) return;
+      Object.entries(sizes).forEach(([size, sqty]) => {
+        const qtyVal = Number(sqty || 0);
+        if (qtyVal <= 0) return;
+        const share = qtyVal / denomQty;
+        const effectiveRevenue = productTotals.effective_revenue * share;
+        const totalCost = productTotals.total_cost * share;
+        sizeRows.push({
+          product_id: pid,
+          product_name: productTotals.product_name,
+          size,
+          qty: qtyVal,
+          gross_revenue: productTotals.gross_revenue * share,
+          effective_revenue: effectiveRevenue,
+          total_cost: totalCost,
+          net_profit: effectiveRevenue - totalCost,
+        });
+      });
+    });
+  }
 
   return {
     monthly: monthlyRows,

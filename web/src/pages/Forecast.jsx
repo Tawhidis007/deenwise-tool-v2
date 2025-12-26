@@ -174,7 +174,7 @@ const ForecastPage = () => {
 
   const totalCost = marketingAdjustedCost + baseOpex;
   const netProfit = marketingAdjustedProfit - baseOpex;
-  const netMarginPct = grossRevenue > 0 ? ((netProfit || 0) / grossRevenue) * 100 : 0;
+  const netMarginPct = effectiveRevenue > 0 ? ((netProfit || 0) / effectiveRevenue) * 100 : 0;
 
   const monthlyOptions = React.useMemo(() => {
     if (!forecast?.monthly) return [];
@@ -283,6 +283,93 @@ const ForecastPage = () => {
     const effective = forecast.product_summary.reduce((s, p) => s + (p.effective_revenue || 0), 0);
     return { gross, effective, delta: gross - effective };
   }, [forecast]);
+
+  const sizeRowsAdjusted = React.useMemo(() => {
+    if (!sizeRows.length || !productSummary.length) return [];
+
+    const perUnitMarketing = (pid) => {
+      const base = productMap[pid];
+      if (!base) return 0;
+      const ov = (inputs?.product_overrides || {})[pid] || {};
+      return Number(ov.marketing_cost_bdt ?? base.marketing_cost_bdt ?? 0);
+    };
+
+    const rowsWithComponents = productSummary.map((row) => {
+      const mPerUnit = perUnitMarketing(row.product_id);
+      const marketingUsed = Number(row.campaign_qty || 0) * mPerUnit;
+      const baseCost = Number(row.total_cost || 0);
+      const costNoMkt = baseCost - marketingUsed;
+      return { ...row, marketingUsed, costNoMkt };
+    });
+
+    const totalMarketingUsed = rowsWithComponents.reduce((s, r) => s + r.marketingUsed, 0);
+    const totalQty = rowsWithComponents.reduce((s, r) => s + Number(r.campaign_qty || 0), 0);
+
+    const allocMarketing = (row) => {
+      if (totalMarketingUsed > 0) {
+        return (row.marketingUsed / totalMarketingUsed) * marketingCalc.marketingTotalFinal;
+      }
+      if (totalQty > 0) {
+        return (Number(row.campaign_qty || 0) / totalQty) * marketingCalc.marketingTotalFinal;
+      }
+      return 0;
+    };
+
+    const allocOpex = (row) => {
+      if (totalQty > 0) {
+        return (Number(row.campaign_qty || 0) / totalQty) * opexTotal;
+      }
+      return 0;
+    };
+
+    const adjustedProductMap = rowsWithComponents.reduce((acc, row) => {
+      const marketingShare = allocMarketing(row);
+      const opexShare = allocOpex(row);
+      const adjustedCost = row.costNoMkt + marketingShare + opexShare;
+      const adjustedProfit = Number(row.net_profit || 0) + row.marketingUsed - marketingShare - opexShare;
+      acc[row.product_id] = {
+        campaign_qty: Number(row.campaign_qty || 0),
+        effective_revenue: Number(row.effective_revenue || 0),
+        total_cost: adjustedCost,
+        net_profit: adjustedProfit,
+      };
+      return acc;
+    }, {});
+
+    const factoryCostByProduct = productSummary.reduce((acc, row) => {
+      const base = productMap[row.product_id];
+      if (!base) return acc;
+      const ov = (inputs?.product_overrides || {})[row.product_id] || {};
+      const packaging = Number(ov.packaging_cost_bdt ?? base.packaging_cost_bdt ?? 0);
+      const manufacturing = Number(base.manufacturing_cost_bdt ?? 0);
+      const perUnitFactory = packaging + manufacturing;
+      acc[row.product_id] = perUnitFactory * Number(row.campaign_qty || 0);
+      return acc;
+    }, {});
+
+    const sizeTotalsByProduct = sizeRows.reduce((acc, row) => {
+      acc[row.product_id] = (acc[row.product_id] || 0) + Number(row.qty || 0);
+      return acc;
+    }, {});
+
+    return sizeRows.map((row) => {
+      const productTotals = adjustedProductMap[row.product_id];
+      if (!productTotals) return row;
+      const sizeQty = Number(row.qty || 0);
+      const denomQty = productTotals.campaign_qty > 0 ? productTotals.campaign_qty : (sizeTotalsByProduct[row.product_id] || 0);
+      if (denomQty <= 0 || sizeQty <= 0) return row;
+      const share = sizeQty / denomQty;
+      const totalCost = productTotals.total_cost * share;
+      const factoryCost = (factoryCostByProduct[row.product_id] || 0) * share;
+      const effectiveRevenue = Number(row.effective_revenue || 0);
+      return {
+        ...row,
+        factory_cost: factoryCost,
+        total_cost: totalCost,
+        net_profit: effectiveRevenue - totalCost,
+      };
+    });
+  }, [sizeRows, productSummary, productMap, inputs, marketingCalc, opexTotal]);
 
   const pulseData = React.useMemo(() => {
     if (!forecast?.monthly || !forecast.monthly.length) return [];
@@ -428,6 +515,26 @@ const ForecastPage = () => {
 
       <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-3">
         <div className="text-lg font-semibold text-text">Size Breakdown</div>
+        <div className="bg-surface border border-border/60 rounded-lg p-3 text-xs text-muted space-y-2">
+          <div className="text-sm font-semibold text-text">Cost Definitions</div>
+          <div>
+            <span className="font-medium text-text">Factory Cost</span> Direct cost of producing the item
+            (manufacturing + packaging). Excludes marketing and business overheads.
+          </div>
+          <div>
+            <span className="font-medium text-text">Total Cost (Fully Loaded)</span> Factory Cost plus allocated
+            marketing spend and operational overheads (OPEX). Represents the true cost to the business per unit.
+          </div>
+          <div>
+            <span className="font-medium text-text">Revenue</span> Effective revenue after discounts and returns.
+          </div>
+          <div>
+            <span className="font-medium text-text">Net Profit</span> Revenue minus Total Cost (Fully Loaded).
+          </div>
+          <div>
+            <span className="font-medium text-text">Net Margin</span> Net Profit as a percentage of Revenue.
+          </div>
+        </div>
         <div className="overflow-auto">
           <table className="min-w-full text-sm">
             <thead className="text-left text-muted border-b border-border/60">
@@ -436,13 +543,14 @@ const ForecastPage = () => {
                 <th className="py-2 pr-3">Size</th>
                 <th className="py-2 pr-3">Qty</th>
                 <th className="py-2 pr-3">Revenue</th>
-                <th className="py-2 pr-3">Cost</th>
+                <th className="py-2 pr-3">Factory Cost</th>
+                <th className="py-2 pr-3">Total Cost (Fully Loaded)</th>
                 <th className="py-2 pr-3">Net Profit</th>
                 <th className="py-2 pr-3">Net Margin</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {sizeRows.map((r) => {
+              {sizeRowsAdjusted.map((r) => {
                 const margin = r.effective_revenue
                   ? (r.net_profit / r.effective_revenue) * 100
                   : 0;
@@ -452,15 +560,16 @@ const ForecastPage = () => {
                     <td className="py-2 pr-3">{r.size}</td>
                     <td className="py-2 pr-3">{r.qty}</td>
                     <td className="py-2 pr-3">{fmt(r.effective_revenue, currency)}</td>
+                    <td className="py-2 pr-3">{fmt(r.factory_cost, currency)}</td>
                     <td className="py-2 pr-3">{fmt(r.total_cost, currency)}</td>
                     <td className="py-2 pr-3">{fmt(r.net_profit, currency)}</td>
                     <td className="py-2 pr-3">{pct(margin)}</td>
                   </tr>
                 );
               })}
-              {!sizeRows.length && (
+              {!sizeRowsAdjusted.length && (
                 <tr>
-                  <td className="py-3 text-muted" colSpan={7}>
+                  <td className="py-3 text-muted" colSpan={8}>
                     No size-level data.
                   </td>
                 </tr>
