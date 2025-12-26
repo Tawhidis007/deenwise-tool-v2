@@ -927,7 +927,7 @@ const ForecastPage = () => {
         </div>
         <div className="pt-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-base font-semibold text-text">Revenue vs Cost by Product</div>
+          <div className="text-base font-semibold text-text">Revenue vs Cost by Product Visual</div>
             <button
               type="button"
               className="text-xs text-muted border border-border/60 rounded-md px-2 py-1 bg-card hover:bg-border/40"
@@ -957,11 +957,11 @@ const ForecastPage = () => {
               </div>
               <div className="border border-border/60 rounded-lg p-4 bg-surface">
                 {productBarData.length ? (
-                  <div className="h-80 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={productBarData}
-                        margin={{ top: 28, right: 16, left: 8, bottom: 32 }}
+              <div className="h-96 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={productBarData}
+                    margin={{ top: 84, right: 16, left: 8, bottom: 32 }}
                         barCategoryGap="12%"
                         barGap={4}
                       >
@@ -983,21 +983,53 @@ const ForecastPage = () => {
                           tickLine={{ stroke: "rgba(148,163,184,0.5)" }}
                           width={72}
                         />
-                        <Tooltip
-                          formatter={(val, name) => [fmt(val, currency), name]}
-                          contentStyle={{ background: "var(--surface)", borderColor: "rgba(148,163,184,0.4)" }}
-                          shared={false}
-                          cursor={{ fill: "rgba(148,163,184,0.08)" }}
-                        />
-                        <Bar dataKey="gross" name="Gross Revenue" fill="#7dd3fc" barSize={22} maxBarSize={24}>
-                          <LabelList dataKey="gross" position="top" formatter={(val) => fmt(val, currency)} angle={-90} fill="rgba(148,163,184,0.9)" fontSize={9} offset={12} />
-                        </Bar>
-                        <Bar dataKey="effective" name="Effective Revenue" fill="#34d399" barSize={22} maxBarSize={24}>
-                          <LabelList dataKey="effective" position="top" formatter={(val) => fmt(val, currency)} angle={-90} fill="rgba(148,163,184,0.9)" fontSize={9} offset={12} />
-                        </Bar>
-                        <Bar dataKey="totalCost" name="Total Cost" fill="rgba(245,158,11,0.8)" barSize={22} maxBarSize={24}>
-                          <LabelList dataKey="totalCost" position="top" formatter={(val) => fmt(val, currency)} angle={-90} fill="rgba(148,163,184,0.9)" fontSize={9} offset={12} />
-                        </Bar>
+                    <Tooltip
+                      formatter={(val, name) => [fmt(val, currency), name]}
+                      contentStyle={{
+                        background: "rgba(15,23,42,0.95)",
+                        borderColor: "rgba(148,163,184,0.4)",
+                      }}
+                      labelStyle={{ color: "#e2e8f0" }}
+                      itemStyle={{ color: "#e2e8f0" }}
+                      shared={false}
+                      cursor={{ fill: "rgba(148,163,184,0.08)" }}
+                    />
+                    <Bar dataKey="gross" name="Gross Revenue" fill="#7dd3fc" barSize={26} maxBarSize={28}>
+                      <LabelList
+                        dataKey="gross"
+                        position="top"
+                        formatter={(val) => fmt(val, currency)}
+                        fill="rgba(226,232,240,0.9)"
+                        fontSize={10}
+                        offset={28}
+                        angle={-90}
+                        textAnchor="middle"
+                      />
+                    </Bar>
+                    <Bar dataKey="effective" name="Effective Revenue" fill="#34d399" barSize={26} maxBarSize={28}>
+                      <LabelList
+                        dataKey="effective"
+                        position="top"
+                        formatter={(val) => fmt(val, currency)}
+                        fill="rgba(226,232,240,0.9)"
+                        fontSize={10}
+                        offset={28}
+                        angle={-90}
+                        textAnchor="middle"
+                      />
+                    </Bar>
+                    <Bar dataKey="totalCost" name="Total Cost" fill="rgba(245,158,11,0.8)" barSize={26} maxBarSize={28}>
+                      <LabelList
+                        dataKey="totalCost"
+                        position="top"
+                        formatter={(val) => fmt(val, currency)}
+                        fill="rgba(226,232,240,0.9)"
+                        fontSize={10}
+                        offset={28}
+                        angle={-90}
+                        textAnchor="middle"
+                      />
+                    </Bar>
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
