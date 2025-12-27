@@ -121,8 +121,8 @@ const InfoTooltip = ({ text }) => {
         i
       </button>
       {open && (
-        <span className="absolute right-0 top-6 z-10 w-52 rounded-md border border-border/70 bg-surface px-2 py-1 text-[11px] text-muted shadow-md">
-          {text}
+        <span className="absolute right-0 top-6 z-10 w-72 rounded-md border border-border/70 bg-surface px-3 py-2 text-[11px] text-muted shadow-md">
+          <div className="max-h-64 overflow-auto pr-1">{text}</div>
         </span>
       )}
     </span>
@@ -282,6 +282,30 @@ const ForecastPage = () => {
       : null;
   const revenueLeakagePct = grossRevenue > 0 ? ((grossRevenue - effectiveRevenue) / grossRevenue) * 100 : null;
   const netMarginValue = effectiveRevenue > 0 ? ((netProfit || 0) / effectiveRevenue) * 100 : null;
+  const revenueLeakageValue = grossRevenue - effectiveRevenue;
+
+  const productSummary = forecast?.product_summary || [];
+
+  const productLines = React.useMemo(
+    () =>
+      (productSummary || []).map((p) => ({
+        id: p.product_id,
+        name: p.product_name || p.product_id,
+        gross: Number(p.gross_revenue || 0),
+        effective: Number(p.effective_revenue || 0),
+        qty: Number(p.campaign_qty || 0),
+      })),
+    [productSummary]
+  );
+
+  const opexLines = React.useMemo(() => {
+    const list = inputs?.campaign?.attached_opex || [];
+    return list.map((item) => ({
+      id: item.id,
+      name: item.name || "OPEX",
+      cost: Number(item.cost_bdt || 0),
+    }));
+  }, [inputs]);
 
   const monthlyOptions = React.useMemo(() => {
     if (!forecast?.monthly) return [];
@@ -365,80 +389,118 @@ const ForecastPage = () => {
     [productMap, inputs, marketingCalc, opexTotal]
   );
 
-  const campaignUnitCost = productUnits > 0 ? totalCost / productUnits : 0;
-
-  // Allocate campaign totals proportionally by quantity for monthly/product rows.
-  const displayRows = React.useMemo(
-    () =>
-      baseRows.map((row) => {
-        const qty = Number(row.qty || 0);
-        const adjustedCost = campaignUnitCost * qty;
-        const effRev = Number(row.effective_revenue ?? row.gross_revenue ?? 0);
-        const adjustedProfit = effRev - adjustedCost;
-        return {
-          ...row,
-          adjustedCost,
-          adjustedProfit,
-        };
-      }),
-    [baseRows, campaignUnitCost]
+  const getProductUnitCosts = React.useCallback(
+    (productId) => {
+      const base = productMap[productId];
+      if (!base) {
+        return { manufacturing: 0, packaging: 0, marketing: 0 };
+      }
+      const ov = (inputs?.product_overrides || {})[productId] || {};
+      const manufacturing = Number(base.manufacturing_cost_bdt ?? 0);
+      const packaging = Number(ov.packaging_cost_bdt ?? base.packaging_cost_bdt ?? 0);
+      const marketing = Number(ov.marketing_cost_bdt ?? base.marketing_cost_bdt ?? 0);
+      return { manufacturing, packaging, marketing };
+    },
+    [inputs, productMap]
   );
 
-  const productSummary = forecast?.product_summary || [];
+  // Allocate campaign totals proportionally by quantity for monthly/product rows.
+  const displayRows = React.useMemo(() => {
+    const campaignMarketingTotal = inputs?.campaign?.marketing_total;
+    const productTotals = baseRows.reduce((acc, row) => {
+      if (acc[row.product_id]) return acc;
+      const qty = Number(row.campaign_qty ?? row.qty ?? 0);
+      const { manufacturing, packaging, marketing } = getProductUnitCosts(row.product_id);
+      const factoryCost = qty * manufacturing;
+      const packagingCost = qty * packaging;
+      const marketingCost =
+        campaignMarketingTotal !== null && campaignMarketingTotal !== undefined
+          ? 0
+          : Number(marketing || 0);
+      const totalCostLocal = factoryCost + packagingCost + marketingCost;
+      acc[row.product_id] = {
+        qty,
+        totalCost: totalCostLocal,
+        factoryCost,
+        packagingCost,
+        marketingCost,
+      };
+      return acc;
+    }, {});
+
+    const rows = baseRows.map((row) => {
+      const qty = Number(row.qty || 0);
+      const effRev = Number(row.effective_revenue ?? row.gross_revenue ?? 0);
+      const totals = productTotals[row.product_id];
+      if (!totals || !totals.qty) {
+        return { ...row, totalCost: 0, netProfit: effRev, netMargin: null };
+      }
+      const share = totals.qty > 0 ? qty / totals.qty : 0;
+      const totalCost = monthFilter === "all" ? totals.totalCost : totals.totalCost * share;
+      const netProfit = effRev - totalCost;
+      const netMargin = effRev ? (netProfit / effRev) * 100 : null;
+      return {
+        ...row,
+        totalCost,
+        netProfit,
+        netMargin,
+        factoryCost: totals.factoryCost * (monthFilter === "all" ? 1 : share),
+        packagingCost: totals.packagingCost * (monthFilter === "all" ? 1 : share),
+        marketingCost: totals.marketingCost * (monthFilter === "all" ? 1 : share),
+      };
+    });
+
+    if (import.meta.env?.DEV && monthFilter === "all" && rows.length) {
+      rows.forEach((row) => {
+        const qty = Number(row.qty || 0);
+        const effRev = Number(row.effective_revenue ?? row.gross_revenue ?? 0);
+        const netProfit = effRev - Number(row.totalCost || 0);
+        // eslint-disable-next-line no-console
+        console.log("Forecast product cost", {
+          product_id: row.product_id,
+          product_name: row.product_name,
+          qty,
+          unitFactoryCost: Number(getProductUnitCosts(row.product_id).manufacturing || 0),
+          unitPackagingCost: Number(getProductUnitCosts(row.product_id).packaging || 0),
+          marketingTotalForProduct: Number(row.marketingCost || 0),
+          grossRev: Number(row.gross_revenue || 0),
+          effectiveRev: effRev,
+          factoryCost: Number(row.factoryCost || 0),
+          packagingCost: Number(row.packagingCost || 0),
+          productMarketingCost: Number(row.marketingCost || 0),
+          totalCost: Number(row.totalCost || 0),
+          netProfit,
+        });
+      });
+    }
+
+    return rows;
+  }, [baseRows, getProductUnitCosts, monthFilter, inputs]);
+
   const sizeRows = forecast?.size_breakdown || [];
 
   const adjustedProductTotals = React.useMemo(() => {
     if (!productSummary.length) return {};
-
-    const perUnitMarketing = (pid) => {
-      const base = productMap[pid];
-      if (!base) return 0;
-      const ov = (inputs?.product_overrides || {})[pid] || {};
-      return Number(ov.marketing_cost_bdt ?? base.marketing_cost_bdt ?? 0);
-    };
-
-    const rowsWithComponents = productSummary.map((row) => {
-      const mPerUnit = perUnitMarketing(row.product_id);
-      const marketingUsed = Number(row.campaign_qty || 0) * mPerUnit;
-      const baseCost = Number(row.total_cost || 0);
-      const costNoMkt = baseCost - marketingUsed;
-      return { ...row, marketingUsed, costNoMkt };
-    });
-
-    const totalMarketingUsed = rowsWithComponents.reduce((s, r) => s + r.marketingUsed, 0);
-    const totalQty = rowsWithComponents.reduce((s, r) => s + Number(r.campaign_qty || 0), 0);
-
-    const allocMarketing = (row) => {
-      if (totalMarketingUsed > 0) {
-        return (row.marketingUsed / totalMarketingUsed) * marketingCalc.marketingTotalFinal;
-      }
-      if (totalQty > 0) {
-        return (Number(row.campaign_qty || 0) / totalQty) * marketingCalc.marketingTotalFinal;
-      }
-      return 0;
-    };
-
-    const allocOpex = (row) => {
-      if (totalQty > 0) {
-        return (Number(row.campaign_qty || 0) / totalQty) * opexTotal;
-      }
-      return 0;
-    };
-
-    return rowsWithComponents.reduce((acc, row) => {
-      const marketingShare = allocMarketing(row);
-      const opexShare = allocOpex(row);
-      const adjustedCost = row.costNoMkt + marketingShare + opexShare;
-      const adjustedProfit = Number(row.net_profit || 0) + row.marketingUsed - marketingShare - opexShare;
+    const totalQty = productUnits || productSummary.reduce((sum, row) => sum + Number(row.campaign_qty || 0), 0);
+    return productSummary.reduce((acc, row) => {
+      const qty = Number(row.campaign_qty || 0);
+      const { manufacturing, packaging, marketing } = getProductUnitCosts(row.product_id);
+      const factoryCost = qty * manufacturing;
+      const packagingCost = qty * packaging;
+      const marketingCost = Number(marketing || 0);
+      const opexAlloc = totalQty > 0 ? opexTotal * (qty / totalQty) : 0;
+      const totalCost = factoryCost + packagingCost + marketingCost + opexAlloc;
+      const effectiveRevenue = Number(row.effective_revenue || 0);
       acc[row.product_id] = {
-        campaign_qty: Number(row.campaign_qty || 0),
-        effective_revenue: Number(row.effective_revenue || 0),
-        total_cost: adjustedCost,
-        net_profit: adjustedProfit,
+        campaign_qty: qty,
+        effective_revenue: effectiveRevenue,
+        total_cost: totalCost,
+        net_profit: effectiveRevenue - totalCost,
+        factory_cost: factoryCost + packagingCost,
       };
       return acc;
     }, {});
-  }, [productSummary, productMap, inputs, marketingCalc, opexTotal]);
+  }, [productSummary, productUnits, getProductUnitCosts, opexTotal]);
 
   const unitBreakdown = React.useMemo(() => {
     if (!productSummary.length) return [];
@@ -591,81 +653,21 @@ const ForecastPage = () => {
 
   const sizeRowsAdjusted = React.useMemo(() => {
     if (!sizeRows.length || !productSummary.length) return [];
-
-    const perUnitMarketing = (pid) => {
-      const base = productMap[pid];
-      if (!base) return 0;
-      const ov = (inputs?.product_overrides || {})[pid] || {};
-      return Number(ov.marketing_cost_bdt ?? base.marketing_cost_bdt ?? 0);
-    };
-
-    const rowsWithComponents = productSummary.map((row) => {
-      const mPerUnit = perUnitMarketing(row.product_id);
-      const marketingUsed = Number(row.campaign_qty || 0) * mPerUnit;
-      const baseCost = Number(row.total_cost || 0);
-      const costNoMkt = baseCost - marketingUsed;
-      return { ...row, marketingUsed, costNoMkt };
-    });
-
-    const totalMarketingUsed = rowsWithComponents.reduce((s, r) => s + r.marketingUsed, 0);
-    const totalQty = rowsWithComponents.reduce((s, r) => s + Number(r.campaign_qty || 0), 0);
-
-    const allocMarketing = (row) => {
-      if (totalMarketingUsed > 0) {
-        return (row.marketingUsed / totalMarketingUsed) * marketingCalc.marketingTotalFinal;
-      }
-      if (totalQty > 0) {
-        return (Number(row.campaign_qty || 0) / totalQty) * marketingCalc.marketingTotalFinal;
-      }
-      return 0;
-    };
-
-    const allocOpex = (row) => {
-      if (totalQty > 0) {
-        return (Number(row.campaign_qty || 0) / totalQty) * opexTotal;
-      }
-      return 0;
-    };
-
-    const adjustedProductMap = rowsWithComponents.reduce((acc, row) => {
-      const marketingShare = allocMarketing(row);
-      const opexShare = allocOpex(row);
-      const adjustedCost = row.costNoMkt + marketingShare + opexShare;
-      const adjustedProfit = Number(row.net_profit || 0) + row.marketingUsed - marketingShare - opexShare;
-      acc[row.product_id] = {
-        campaign_qty: Number(row.campaign_qty || 0),
-        effective_revenue: Number(row.effective_revenue || 0),
-        total_cost: adjustedCost,
-        net_profit: adjustedProfit,
-      };
-      return acc;
-    }, {});
-
-    const factoryCostByProduct = productSummary.reduce((acc, row) => {
-      const base = productMap[row.product_id];
-      if (!base) return acc;
-      const ov = (inputs?.product_overrides || {})[row.product_id] || {};
-      const packaging = Number(ov.packaging_cost_bdt ?? base.packaging_cost_bdt ?? 0);
-      const manufacturing = Number(base.manufacturing_cost_bdt ?? 0);
-      const perUnitFactory = packaging + manufacturing;
-      acc[row.product_id] = perUnitFactory * Number(row.campaign_qty || 0);
-      return acc;
-    }, {});
-
     const sizeTotalsByProduct = sizeRows.reduce((acc, row) => {
       acc[row.product_id] = (acc[row.product_id] || 0) + Number(row.qty || 0);
       return acc;
     }, {});
 
     return sizeRows.map((row) => {
-      const productTotals = adjustedProductMap[row.product_id];
+      const productTotals = adjustedProductTotals[row.product_id];
       if (!productTotals) return row;
       const sizeQty = Number(row.qty || 0);
-      const denomQty = productTotals.campaign_qty > 0 ? productTotals.campaign_qty : (sizeTotalsByProduct[row.product_id] || 0);
+      const denomQty =
+        productTotals.campaign_qty > 0 ? productTotals.campaign_qty : sizeTotalsByProduct[row.product_id] || 0;
       if (denomQty <= 0 || sizeQty <= 0) return row;
       const share = sizeQty / denomQty;
       const totalCost = productTotals.total_cost * share;
-      const factoryCost = (factoryCostByProduct[row.product_id] || 0) * share;
+      const factoryCost = (productTotals.factory_cost || 0) * share;
       const effectiveRevenue = Number(row.effective_revenue || 0);
       return {
         ...row,
@@ -674,7 +676,7 @@ const ForecastPage = () => {
         net_profit: effectiveRevenue - totalCost,
       };
     });
-  }, [sizeRows, productSummary, productMap, inputs, marketingCalc, opexTotal]);
+  }, [sizeRows, productSummary, adjustedProductTotals]);
 
   const sizeProductOptions = React.useMemo(() => {
     if (!sizeRowsAdjusted.length) return [];
@@ -758,7 +760,7 @@ const ForecastPage = () => {
       }
       acc[key].gross += Number(row.gross_revenue || 0);
       acc[key].effective += Number(row.effective_revenue || 0);
-      acc[key].totalCost += Number(row.adjustedCost ?? row.total_cost ?? 0);
+      acc[key].totalCost += Number(row.totalCost ?? 0);
       return acc;
     }, {});
     return Object.values(aggregates);
@@ -824,17 +826,71 @@ const ForecastPage = () => {
           <Card
             title="Product Units"
             value={productUnits}
-            help="Total units planned across all products for the campaign."
+            help={
+              <div className="space-y-1">
+                <div className="font-semibold text-text">Definition</div>
+                <div>Total units planned across all products for the campaign.</div>
+                <div className="pt-1 border-t border-border/60">
+                  <div className="font-semibold text-text">Calculation</div>
+                  <div>Total units = Σ product quantities</div>
+                  <div className="space-y-0.5 text-muted">
+                    {productLines.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between">
+                        <span>{p.name}</span>
+                        <span>{p.qty}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-text pt-1 border-t border-border/60">Total: {productUnits} units</div>
+                </div>
+              </div>
+            }
           />
           <Card
             title="Gross Revenue"
             value={fmt(grossRevenue, currency)}
-            help="Sales before discounts and returns."
+            help={
+              <div className="space-y-1">
+                <div className="font-semibold text-text">Definition</div>
+                <div>Sales before discounts and returns.</div>
+                <div className="pt-1 border-t border-border/60">
+                  <div className="font-semibold text-text">Calculation</div>
+                  <div>Gross revenue = Σ product gross revenue</div>
+                  <div className="space-y-0.5 text-muted">
+                    {productLines.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between">
+                        <span>{p.name}</span>
+                        <span>{fmt(p.gross, currency)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-text pt-1 border-t border-border/60">{fmt(grossRevenue, currency)}</div>
+                </div>
+              </div>
+            }
           />
           <Card
             title="Effective Revenue (after discounts & returns)"
             value={fmt(effectiveRevenue, currency)}
-            help="Sales after discounts and returns."
+            help={
+              <div className="space-y-1">
+                <div className="font-semibold text-text">Definition</div>
+                <div>Sales after discounts and returns.</div>
+                <div className="pt-1 border-t border-border/60">
+                  <div className="font-semibold text-text">Calculation</div>
+                  <div>Effective revenue = Σ product effective revenue</div>
+                  <div className="space-y-0.5 text-muted">
+                    {productLines.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between">
+                        <span>{p.name}</span>
+                        <span>{fmt(p.effective, currency)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-text pt-1 border-t border-border/60">{fmt(effectiveRevenue, currency)}</div>
+                </div>
+              </div>
+            }
           />
           <Card
             title="Revenue Leakage Rate"
@@ -848,14 +904,68 @@ const ForecastPage = () => {
                 "--"
               )
             }
-            help="Share of gross revenue lost to discounts and returns."
+            help={
+              <div className="space-y-1">
+                <div className="font-semibold text-text">Definition</div>
+                <div>Share of gross revenue lost to discounts and returns.</div>
+                <div className="pt-1 border-t border-border/60">
+                  <div className="font-semibold text-text">Calculation</div>
+                  <div>Leakage = (Gross − Effective) ÷ Gross</div>
+                  <div className="space-y-0.5 text-muted">
+                    <div>Gross revenue: {fmt(grossRevenue, currency)}</div>
+                    <div>Effective revenue: {fmt(effectiveRevenue, currency)}</div>
+                    <div>Leakage value: {fmt(revenueLeakageValue, currency)}</div>
+                  </div>
+                  <div className="text-text pt-1 border-t border-border/60">
+                    {fmt(revenueLeakageValue, currency)} ÷ {fmt(grossRevenue, currency)} ={" "}
+                    {revenueLeakagePct?.toFixed(1)}%
+                  </div>
+                </div>
+              </div>
+            }
           />
           <Card
             title="Total Cost (incl. Marketing, OPEX, Packaging)"
             value={fmt(totalCost, currency)}
-            help="All costs including factory, marketing, and OPEX."
+            help={
+              <div className="space-y-1">
+                <div className="font-semibold text-text">Definition</div>
+                <div>All costs including factory, marketing, and OPEX.</div>
+                <div className="pt-1 border-t border-border/60">
+                  <div className="font-semibold text-text">Calculation</div>
+                  <div>Total cost = Base cost − Per‑unit marketing + Campaign marketing + OPEX</div>
+                  <div className="space-y-0.5 text-muted">
+                    <div>Base cost (forecast): {fmt(baseCost, currency)}</div>
+                    <div>Per‑unit marketing component: {fmt(mPerUnit, currency)}</div>
+                    <div>Campaign marketing total: {fmt(mCampaign, currency)}</div>
+                    <div>OPEX total: {fmt(baseOpex, currency)}</div>
+                  </div>
+                  <div className="text-text pt-1 border-t border-border/60">{fmt(totalCost, currency)}</div>
+                </div>
+              </div>
+            }
           />
-          <Card title="Net Profit" value={fmt(netProfit, currency)} help="Effective revenue minus total cost." />
+          <Card
+            title="Net Profit"
+            value={fmt(netProfit, currency)}
+            help={
+              <div className="space-y-1">
+                <div className="font-semibold text-text">Definition</div>
+                <div>Effective revenue minus total cost.</div>
+                <div className="pt-1 border-t border-border/60">
+                  <div className="font-semibold text-text">Calculation</div>
+                  <div>Net profit = Effective revenue − Total cost</div>
+                  <div className="space-y-0.5 text-muted">
+                    <div>Effective revenue: {fmt(effectiveRevenue, currency)}</div>
+                    <div>Total cost: {fmt(totalCost, currency)}</div>
+                  </div>
+                  <div className="text-text pt-1 border-t border-border/60">
+                    {fmt(effectiveRevenue, currency)} − {fmt(totalCost, currency)} = {fmt(netProfit, currency)}
+                  </div>
+                </div>
+              </div>
+            }
+          />
           <Card
             title="Net Margin"
             value={
@@ -868,7 +978,23 @@ const ForecastPage = () => {
                 "--"
               )
             }
-            help="Net profit as a share of effective revenue."
+            help={
+              <div className="space-y-1">
+                <div className="font-semibold text-text">Definition</div>
+                <div>Net profit as a share of effective revenue.</div>
+                <div className="pt-1 border-t border-border/60">
+                  <div className="font-semibold text-text">Calculation</div>
+                  <div>Net margin = Net profit ÷ Effective revenue</div>
+                  <div className="space-y-0.5 text-muted">
+                    <div>Net profit: {fmt(netProfit, currency)}</div>
+                    <div>Effective revenue: {fmt(effectiveRevenue, currency)}</div>
+                  </div>
+                  <div className="text-text pt-1 border-t border-border/60">
+                    {fmt(netProfit, currency)} ÷ {fmt(effectiveRevenue, currency)} = {netMarginValue?.toFixed(1)}%
+                  </div>
+                </div>
+              </div>
+            }
           />
           <Card
             title="Marketing Efficiency Ratio"
@@ -882,13 +1008,65 @@ const ForecastPage = () => {
                 "--"
               )
             }
-            help="Effective revenue earned per 1 unit of marketing cost."
+            help={
+              <div className="space-y-1">
+                <div className="font-semibold text-text">Definition</div>
+                <div>Effective revenue earned per 1 unit of marketing cost.</div>
+                <div className="pt-1 border-t border-border/60">
+                  <div className="font-semibold text-text">Calculation</div>
+                  <div>Efficiency = Effective revenue ÷ Marketing cost</div>
+                  <div className="space-y-0.5 text-muted">
+                    <div>Effective revenue: {fmt(effectiveRevenue, currency)}</div>
+                    <div>Marketing cost: {fmt(marketingCalc.marketingTotalFinal, currency)}</div>
+                  </div>
+                  <div className="text-text pt-1 border-t border-border/60">
+                    {fmt(effectiveRevenue, currency)} ÷ {fmt(marketingCalc.marketingTotalFinal, currency)} ={" "}
+                    {marketingEfficiencyRatio?.toFixed(2)}x
+                  </div>
+                </div>
+              </div>
+            }
           />
         </div>
       </div>
 
       <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-3">
-        <div className="text-lg font-semibold text-text">Marketing & OPEX</div>
+        <div className="flex items-start justify-between gap-2">
+          <div className="text-lg font-semibold text-text">Marketing & OPEX</div>
+          <InfoTooltip
+            text={
+              <div className="space-y-1">
+                <div className="font-semibold text-text">Definition</div>
+                <div>Campaign-level marketing spend and linked OPEX totals.</div>
+                <div className="pt-1 border-t border-border/60">
+                  <div className="font-semibold text-text">Calculation</div>
+                  <div>Marketing (campaign) = sum of campaign marketing inputs</div>
+                  <div>OPEX (linked) = sum of linked OPEX items</div>
+                  <div>Total Marketing & OPEX = Marketing + OPEX</div>
+                  <div className="space-y-0.5 text-muted">
+                    <div>Marketing total: {fmt(marketingCalc.marketingTotalFinal, currency)}</div>
+                    {opexLines.length ? (
+                      <div className="pt-1">
+                        {opexLines.map((item) => (
+                          <div key={item.id} className="flex items-center justify-between">
+                            <span>{item.name}</span>
+                            <span>{fmt(item.cost, currency)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div>OPEX total: {fmt(opexTotal, currency)}</div>
+                    )}
+                  </div>
+                  <div className="text-text pt-1 border-t border-border/60">
+                    {fmt(marketingCalc.marketingTotalFinal, currency)} + {fmt(opexTotal, currency)} ={" "}
+                    {fmt(marketingCalc.marketingTotalFinal + opexTotal, currency)}
+                  </div>
+                </div>
+              </div>
+            }
+          />
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card title="Marketing Cost (campaign)" value={fmt(marketingCalc.marketingTotalFinal, currency)} />
           <Card title="OPEX (linked)" value={fmt(opexTotal, currency)} />
@@ -961,9 +1139,9 @@ const ForecastPage = () => {
             <tbody className="divide-y divide-border/60">
               {displayRows.map((row) => {
                 const effRev = Number(row.effective_revenue ?? row.gross_revenue ?? 0);
-                const cost = Number(row.adjustedCost ?? row.total_cost ?? 0);
-                const profit = Number(row.adjustedProfit ?? row.net_profit ?? 0);
-                const margin = effRev ? (profit / effRev) * 100 : 0;
+                const cost = Number(row.totalCost ?? 0);
+                const profit = Number(row.netProfit ?? 0);
+                const margin = row.netMargin ?? (effRev ? (profit / effRev) * 100 : null);
                 return (
                   <tr key={`${row.month}-${row.product_id}`}>
                     <td className="py-2 pr-3 text-muted">{row.month_nice || niceMonth(row.month)}</td>
@@ -973,7 +1151,7 @@ const ForecastPage = () => {
                     <td className="py-2 pr-3">{fmt(row.effective_revenue, currency)}</td>
                     <td className="py-2 pr-3">{fmt(cost, currency)}</td>
                     <td className="py-2 pr-3">{fmt(profit, currency)}</td>
-                    <td className="py-2 pr-3">{pct(margin)}</td>
+                    <td className="py-2 pr-3">{margin === null ? "--" : pct(margin)}</td>
                   </tr>
                 );
               })}

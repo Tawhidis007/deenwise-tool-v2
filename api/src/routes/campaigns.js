@@ -204,6 +204,17 @@ router.get('/:id/inputs', requireAuth, async (req, res, next) => {
       };
     });
 
+    const { data: marketingRows, error: marketingPlanErr } = await supabase
+      .from('campaign_product_marketing_months')
+      .select('*')
+      .eq('campaign_id', campaignId);
+    if (marketingPlanErr) throw marketingPlanErr;
+    const marketing_plan = {};
+    (marketingRows || []).forEach((row) => {
+      if (!marketing_plan[row.product_id]) marketing_plan[row.product_id] = {};
+      marketing_plan[row.product_id][row.month_label] = Number(row.marketing_cost_bdt || 0);
+    });
+
     const { data: marketingRow, error: marketingErr } = await supabase
       .from('campaign_marketing_totals')
       .select('*')
@@ -221,6 +232,7 @@ router.get('/:id/inputs', requireAuth, async (req, res, next) => {
       month_weights,
       product_month_weights,
       size_breakdown,
+      marketing_plan,
       product_overrides,
     });
   } catch (err) {
@@ -315,6 +327,47 @@ router.put('/:id/marketing-total', requireAuth, async (req, res, next) => {
   }
 });
 
+// PUT /campaigns/:id/marketing-plan
+router.put('/:id/marketing-plan', requireAuth, async (req, res, next) => {
+  try {
+    const campaignId = req.params.id;
+    const plan = req.body?.marketing_plan;
+    if (!isObject(plan)) {
+      return res.status(400).json({ error: 'Invalid marketing_plan' });
+    }
+
+    const rows = Object.entries(plan).reduce((acc, [product_id, months]) => {
+      if (!isObject(months)) return acc;
+      Object.entries(months).forEach(([month_label, value]) => {
+        const num = Number(value || 0);
+        if (Number.isNaN(num) || num < 0) return;
+        acc.push({
+          campaign_id: campaignId,
+          product_id,
+          month_label,
+          marketing_cost_bdt: num,
+        });
+      });
+      return acc;
+    }, []);
+
+    const { error: delErr } = await supabase
+      .from('campaign_product_marketing_months')
+      .delete()
+      .eq('campaign_id', campaignId);
+    if (delErr) throw delErr;
+
+    if (rows.length) {
+      const { error: insErr } = await supabase.from('campaign_product_marketing_months').insert(rows);
+      if (insErr) throw insErr;
+    }
+
+    return res.json({ saved: true, count: rows.length });
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // PUT /campaigns/:id/opex
 router.put('/:id/opex', requireAuth, async (req, res, next) => {
   try {
@@ -391,6 +444,7 @@ router.delete('/:id', requireAuth, async (req, res, next) => {
       'campaign_month_weights',
       'campaign_size_breakdown',
       'campaign_product_overrides',
+      'campaign_product_marketing_months',
       'campaign_marketing_totals',
       'campaign_opex',
       'scenario_campaign_links',

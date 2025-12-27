@@ -12,6 +12,7 @@ import {
   saveSizeBreakdown,
   saveCampaignOverrides,
   saveCampaignOpex,
+  saveCampaignMarketingPlan,
 } from "../api/campaigns";
 import { fetchProducts } from "../api/products";
 import { fetchOpex, createOpex, deleteOpex } from "../api/opex";
@@ -82,12 +83,14 @@ const CampaignsPage = () => {
   const [attachedOpexDetails, setAttachedOpexDetails] = React.useState([]);
   const [quantitiesDirty, setQuantitiesDirty] = React.useState(false);
   const [collapsedProducts, setCollapsedProducts] = React.useState({});
+  const [marketingPlan, setMarketingPlan] = React.useState({});
   const [baseline, setBaseline] = React.useState({
     selected: [],
     quantities: {},
     weights: {},
     sizes: {},
     overrides: {},
+    marketing_plan: {},
     opex: [],
   });
   const [showDeleteModal, setShowDeleteModal] = React.useState(false);
@@ -139,6 +142,7 @@ const CampaignsPage = () => {
     setPerProductWeights(inputs.product_month_weights || {});
     setSizes(inputs.size_breakdown || {});
     setProductOverrides(inputs.product_overrides || {});
+    setMarketingPlan(inputs.marketing_plan || {});
     setSelectedOpex(inputs.campaign?.opex_ids || []);
     setAttachedOpexDetails(inputs.campaign?.attached_opex || []);
     setCampaignForm(inputs.campaign);
@@ -150,6 +154,7 @@ const CampaignsPage = () => {
       weights: inputs.product_month_weights || {},
       sizes: inputs.size_breakdown || {},
       overrides: inputs.product_overrides || {},
+      marketing_plan: inputs.marketing_plan || {},
       opex: inputs.campaign?.opex_ids || [],
     });
   }, [inputs, products]);
@@ -215,11 +220,16 @@ const CampaignsPage = () => {
         if (productOverrides[pid]) acc[pid] = productOverrides[pid];
         return acc;
       }, {});
+      const filteredMarketingPlan = selectedProducts.reduce((acc, pid) => {
+        if (marketingPlan[pid]) acc[pid] = marketingPlan[pid];
+        return acc;
+      }, {});
 
       await saveCampaignQuantities({ id, quantities: filteredQuantities });
       await saveProductMonthWeights({ id, weights: filteredWeights });
       await saveSizeBreakdown({ id, sizes: filteredSizes });
       await saveCampaignOverrides({ id, overrides: filteredOverrides });
+      await saveCampaignMarketingPlan({ id, marketing_plan: filteredMarketingPlan });
       await saveCampaignOpex({ campaignId: id, opexIds: selectedOpex });
     },
     onSuccess: () => {
@@ -231,6 +241,7 @@ const CampaignsPage = () => {
         weights: { ...perProductWeights },
         sizes: { ...sizes },
         overrides: { ...productOverrides },
+        marketing_plan: { ...marketingPlan },
         opex: [...selectedOpex],
       });
     },
@@ -283,6 +294,9 @@ const CampaignsPage = () => {
         const s = { ...sizes };
         delete s[pid];
         setSizes(s);
+        const mp = { ...marketingPlan };
+        delete mp[pid];
+        setMarketingPlan(mp);
         setQuantitiesDirty(true);
         return next;
       }
@@ -300,6 +314,7 @@ const CampaignsPage = () => {
   const setWeight = (pid, month, val) => {
     const num = Number(val || 0);
     if (Number.isNaN(num) || num < 0) return;
+    const totalQty = Number(quantities[pid] || 0);
     setPerProductWeights((prev) => {
       const current = { ...(prev[pid] || {}) };
       current[month] = num;
@@ -308,9 +323,9 @@ const CampaignsPage = () => {
         const sumExceptLast = months
           .filter((m) => m !== last)
           .reduce((acc, m) => acc + Number(current[m] || 0), 0);
-        current[last] = Math.max(0, 100 - sumExceptLast);
+        current[last] = Math.max(0, totalQty - sumExceptLast);
       } else if (months.length === 1) {
-        current[months[0]] = 100;
+        current[months[0]] = totalQty;
       }
       return { ...prev, [pid]: current };
     });
@@ -341,12 +356,26 @@ const CampaignsPage = () => {
     setQuantitiesDirty(true);
   };
 
+  const setMarketingAmount = (pid, month, val) => {
+    const num = Number(val || 0);
+    if (Number.isNaN(num) || num < 0) return;
+    setMarketingPlan((prev) => ({
+      ...prev,
+      [pid]: {
+        ...(prev[pid] || {}),
+        [month]: num,
+      },
+    }));
+    setQuantitiesDirty(true);
+  };
+
   const resetToBaseline = () => {
     setSelectedProducts(baseline.selected || []);
     setQuantities(baseline.quantities || {});
     setPerProductWeights(baseline.weights || {});
     setSizes(baseline.sizes || {});
     setProductOverrides(baseline.overrides || {});
+    setMarketingPlan(baseline.marketing_plan || {});
     setSelectedOpex(baseline.opex || []);
     setQuantitiesDirty(false);
   };
@@ -359,6 +388,7 @@ const CampaignsPage = () => {
       weights: { ...perProductWeights },
       sizes: { ...sizes },
       overrides: { ...productOverrides },
+      marketing_plan: { ...marketingPlan },
       opex: [...selectedOpex],
     });
   };
@@ -587,19 +617,6 @@ const CampaignsPage = () => {
                                 />
                               </div>
                               <div>
-                                <label className="text-xs text-muted">Marketing cost ({currency})</label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  className="mt-1 w-full bg-surface border border-border/70 rounded px-2 py-1 text-sm"
-                                  value={productOverrides[pid]?.marketing_cost_bdt ?? ""}
-                                  onChange={(e) => setOverride(pid, "marketing_cost_bdt", e.target.value)}
-                                  disabled={disabled}
-                                  placeholder="override"
-                                />
-                              </div>
-                              <div>
                                 <label className="text-xs text-muted">Discount / promo (%)</label>
                                 <input
                                   type="number"
@@ -646,12 +663,12 @@ const CampaignsPage = () => {
                                       min="0"
                                       step="1"
                                       className="mt-1 w-full bg-surface border border-border/70 rounded px-2 py-1 text-sm"
-                                      value={perProductWeights[pid]?.[m] ?? (months.length === 1 ? 100 : 0)}
+                                      value={perProductWeights[pid]?.[m] ?? (months.length === 1 ? totalQty : 0)}
                                       onChange={(e) => setWeight(pid, m, e.target.value)}
                                       disabled={disabled}
                                     />
                                     {idx === months.length - 1 && months.length > 1 && (
-                                      <p className="text-[11px] text-muted mt-1">Auto-balances to reach 100%</p>
+                                      <p className="text-[11px] text-muted mt-1">Auto-balances to reach total qty</p>
                                     )}
                                   </div>
                                 ))}
@@ -711,6 +728,61 @@ const CampaignsPage = () => {
               )}
             </div>
 
+            <div className="card space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-semibold">Marketing Plan</h2>
+                  <p className="text-sm text-muted">
+                    Set per-product marketing spend by month for this campaign.
+                  </p>
+                </div>
+              </div>
+              {!selectedCampaign || months.length === 0 ? (
+                <div className="text-sm text-muted">Select a campaign to plan monthly marketing.</div>
+              ) : selectedProducts.length === 0 ? (
+                <div className="text-sm text-muted">Select products to plan marketing spend.</div>
+              ) : (
+                <div className="overflow-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="text-left text-muted border-b border-border/60">
+                      <tr>
+                        <th className="py-2 pr-3">Product</th>
+                        {months.map((m) => (
+                          <th key={m} className="py-2 pr-3">
+                            {niceMonth(m)}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {selectedProducts.map((pid) => {
+                        const prod = products.find((p) => p.id === pid);
+                        if (!prod) return null;
+                        return (
+                          <tr key={pid}>
+                            <td className="py-2 pr-3">{prod.name}</td>
+                            {months.map((m) => (
+                              <td key={m} className="py-2 pr-3">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  className="w-full bg-surface border border-border/70 rounded px-2 py-1 text-sm"
+                                  value={marketingPlan[pid]?.[m] ?? 0}
+                                  onChange={(e) => setMarketingAmount(pid, m, e.target.value)}
+                                  disabled={disabled}
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
             {/* OPEX */}
             <div className="card space-y-3">
               <div className="flex items-start justify-between gap-4">
@@ -754,19 +826,19 @@ const CampaignsPage = () => {
               <div className="flex justify-end gap-3">
                 <button
                   className="bg-accent text-bg px-4 py-2 rounded-md font-semibold"
-                  onClick={() =>
-                    saveQuantMut.mutate().then(() => {
-                      updateCampMut.mutate({
-                        id: selectedCampaign.id,
-                        payload: {
-                          name: campaignForm.name,
-                          start_date: campaignForm.start_date,
-                          end_date: campaignForm.end_date,
-                          distribution_mode: "Custom",
-                        },
-                      });
-                    })
-                  }
+                  onClick={async () => {
+                    if (!selectedCampaign) return;
+                    await saveQuantMut.mutateAsync();
+                    await updateCampMut.mutateAsync({
+                      id: selectedCampaign.id,
+                      payload: {
+                        name: campaignForm.name,
+                        start_date: campaignForm.start_date,
+                        end_date: campaignForm.end_date,
+                        distribution_mode: "Custom",
+                      },
+                    });
+                  }}
                   disabled={updateCampMut.isLoading || saveQuantMut.isLoading}
                 >
                   Save Campaign

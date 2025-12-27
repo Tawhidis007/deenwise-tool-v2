@@ -50,6 +50,11 @@ export const saveMarketingTotal = async ({ id, marketing_cost_total_bdt }) => {
   return data;
 };
 
+export const saveCampaignMarketingPlan = async ({ id, marketing_plan }) => {
+  const { data } = await api.put(`/campaigns/${id}/marketing-plan`, { marketing_plan });
+  return data;
+};
+
 export const saveCampaignOpex = async ({ campaignId, opexIds }) => {
   const { data } = await api.put(`/campaigns/${campaignId}/opex`, { opexIds });
   return data;
