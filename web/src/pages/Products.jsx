@@ -88,6 +88,8 @@ const ProductsPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       setStatusMsg("Product updated.");
+      setEditId(null);
+      setEditRow(emptyProductForm);
     },
   });
 

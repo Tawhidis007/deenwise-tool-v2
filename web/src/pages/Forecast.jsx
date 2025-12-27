@@ -199,6 +199,7 @@ const ForecastPage = () => {
       return { marketingComponentUsed: 0, marketingTotalFinal: 0 };
     }
     const overrides = inputs.product_overrides || {};
+    const marketingPlan = inputs.marketing_plan || {};
 
     let marketingComponentUsed = 0;
     Object.entries(inputs.quantities).forEach(([pid, qty]) => {
@@ -208,6 +209,17 @@ const ForecastPage = () => {
       const perUnitMkt = ov.marketing_cost_bdt ?? base.marketing_cost_bdt ?? 0;
       marketingComponentUsed += Number(qty || 0) * Number(perUnitMkt || 0);
     });
+
+    const marketingPlanTotal = Object.values(marketingPlan).reduce((sum, perProduct) => {
+      if (!perProduct) return sum;
+      return (
+        sum +
+        Object.values(perProduct).reduce((innerSum, value) => innerSum + Number(value || 0), 0)
+      );
+    }, 0);
+    const hasMarketingPlan = Object.values(marketingPlan).some(
+      (perProduct) => perProduct && Object.keys(perProduct).length > 0
+    );
 
     // Prefer campaign-level total, then explicit override totals, else per-unit*qty fallback.
     const campaignTotal = inputs.campaign?.marketing_total;
@@ -219,7 +231,9 @@ const ForecastPage = () => {
     }, 0);
 
     const marketingTotalFinal =
-      campaignTotal !== null && campaignTotal !== undefined
+      hasMarketingPlan
+        ? Number(marketingPlanTotal || 0)
+        : campaignTotal !== null && campaignTotal !== undefined
         ? Number(campaignTotal || 0)
         : overrideTotals > 0
         ? overrideTotals

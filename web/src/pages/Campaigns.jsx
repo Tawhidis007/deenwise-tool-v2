@@ -657,7 +657,7 @@ const CampaignsPage = () => {
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                                 {months.map((m, idx) => (
                                   <div key={m}>
-                                    <label className="text-xs text-muted">% Target Qty Sell ({niceMonth(m).split(" ")[0]})</label>
+                                    <label className="text-xs text-muted">Target Qty Sell ({niceMonth(m).split(" ")[0]})</label>
                                     <input
                                       type="number"
                                       min="0"
