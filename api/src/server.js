@@ -12,6 +12,7 @@ import opexRouter from './routes/opex.js';
 import scenariosRouter from './routes/scenarios.js';
 import settingsRouter from './routes/settings.js';
 import exportsRouter from './routes/exports.js';
+import authRouter from './routes/auth.js';
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use('/', opexRouter);
 app.use('/scenarios', scenariosRouter);
 app.use('/', settingsRouter);
 app.use('/', exportsRouter);
+app.use('/', authRouter);
 
 // TODO: add protected routes using requireAuth middleware once business logic is implemented
 

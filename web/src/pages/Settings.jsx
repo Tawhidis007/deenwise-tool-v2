@@ -2,12 +2,19 @@ import React from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { fetchDisplaySettings, updateDisplaySettings } from "../api/settings";
 import { useCurrency } from "../hooks/useCurrency";
+import { changePassword } from "../api/auth";
 
 const SettingsPage = () => {
   const { currency, setCurrency } = useCurrency();
   const [rates, setRates] = React.useState({ USD: 117, GBP: 146, BDT: 1 });
   const [statusMsg, setStatusMsg] = React.useState("");
   const [uiTheme, setUiTheme] = React.useState("premium");
+  const [currentPassword, setCurrentPassword] = React.useState("");
+  const [newPassword, setNewPassword] = React.useState("");
+  const [confirmPassword, setConfirmPassword] = React.useState("");
+  const [passwordMsg, setPasswordMsg] = React.useState("");
+  const [passwordStatus, setPasswordStatus] = React.useState("");
+  const [showPasswordConfirm, setShowPasswordConfirm] = React.useState(false);
 
   const settingsQuery = useQuery({ queryKey: ["settings"], queryFn: fetchDisplaySettings });
 
@@ -45,6 +52,44 @@ const SettingsPage = () => {
     setUiTheme(nextTheme);
     localStorage.setItem("dw-ui-theme", nextTheme);
     document.documentElement.setAttribute("data-theme", nextTheme);
+  };
+
+  const requestPasswordChange = (e) => {
+    e.preventDefault();
+    setPasswordMsg("");
+    setPasswordStatus("");
+    if (!newPassword || newPassword.length < 6) {
+      setPasswordMsg("New password must be at least 6 characters.");
+      setPasswordStatus("error");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordMsg("New password and confirmation do not match.");
+      setPasswordStatus("error");
+      return;
+    }
+    setShowPasswordConfirm(true);
+  };
+
+  const confirmPasswordChange = async () => {
+    const username = sessionStorage.getItem("dw-user") || "deenwise_admin";
+    try {
+      await changePassword({
+        username,
+        currentPassword,
+        newPassword,
+      });
+      setShowPasswordConfirm(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordMsg("Password updated successfully.");
+      setPasswordStatus("success");
+    } catch (err) {
+      setShowPasswordConfirm(false);
+      setPasswordMsg("Failed to update password. Please try again.");
+      setPasswordStatus("error");
+    }
   };
 
   return (
@@ -112,6 +157,55 @@ const SettingsPage = () => {
       </section>
 
       <section className="card space-y-4">
+        <h2 className="text-xl font-semibold">Change Password</h2>
+        <p className="text-muted text-sm">Update your local sign-in password for this session.</p>
+        <form className="grid grid-cols-1 md:grid-cols-3 gap-4" onSubmit={requestPasswordChange}>
+          <div>
+            <label className="text-sm text-muted">Current password</label>
+            <input
+              type="password"
+              className="mt-1 w-full"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-sm text-muted">New password</label>
+            <input
+              type="password"
+              className="mt-1 w-full"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-sm text-muted">Confirm new password</label>
+            <input
+              type="password"
+              className="mt-1 w-full"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+          </div>
+          <div className="md:col-span-3 flex items-center justify-between">
+            {passwordMsg ? (
+              <span
+                className="text-sm"
+                style={{ color: passwordStatus === "error" ? "var(--color-returns)" : "var(--color-positive)" }}
+              >
+                {passwordMsg}
+              </span>
+            ) : (
+              <span />
+            )}
+            <button className="bg-accent text-bg px-4 py-2 rounded-md font-semibold" type="submit">
+              Change Password
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="card space-y-4">
         <h2 className="text-xl font-semibold">Exchange Rates</h2>
         <p className="text-muted text-sm">Update only if needed. These rates convert BDT → USD/GBP for display.</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -156,6 +250,30 @@ const SettingsPage = () => {
           Future items: VAT assumptions, default return/discount rates, manufacturing & shipping multipliers, yearly inflation assumptions, currency auto-refresh, user permissions & locking.
         </p>
       </section>
+      {showPasswordConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg/85 backdrop-blur-sm">
+          <div className="bg-surface rounded-lg shadow-xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Change password?</h3>
+              <button className="text-muted" onClick={() => setShowPasswordConfirm(false)}>
+                ×
+              </button>
+            </div>
+            <p className="text-sm text-muted">Are you sure you want to change your password?</p>
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-4 py-2 rounded-md border border-border/60 text-muted"
+                onClick={() => setShowPasswordConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button className="px-4 py-2 rounded-md bg-accent text-bg font-semibold" onClick={confirmPasswordChange}>
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
