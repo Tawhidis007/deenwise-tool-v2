@@ -14,7 +14,7 @@ import {
   saveCampaignOpex,
 } from "../api/campaigns";
 import { fetchProducts } from "../api/products";
-import { fetchOpex, createOpex } from "../api/opex";
+import { fetchOpex, createOpex, deleteOpex } from "../api/opex";
 import { useCurrency } from "../hooks/useCurrency";
 
 const monthRange = (start, end) => {
@@ -76,6 +76,8 @@ const CampaignsPage = () => {
   const [showProductsModal, setShowProductsModal] = React.useState(false);
   const [showOpexModal, setShowOpexModal] = React.useState(false);
   const [showCreateOpex, setShowCreateOpex] = React.useState(false);
+  const [showDeleteOpexModal, setShowDeleteOpexModal] = React.useState(false);
+  const [deleteOpexTarget, setDeleteOpexTarget] = React.useState(null);
   const [selectedOpex, setSelectedOpex] = React.useState([]);
   const [attachedOpexDetails, setAttachedOpexDetails] = React.useState([]);
   const [quantitiesDirty, setQuantitiesDirty] = React.useState(false);
@@ -251,6 +253,19 @@ const CampaignsPage = () => {
       setShowCreateOpex(false);
       setStatusMsg("OPEX created.");
     },
+  });
+
+  const deleteOpexMut = useMutation({
+    mutationFn: deleteOpex,
+    onSuccess: (id) => {
+      queryClient.invalidateQueries({ queryKey: ["opex"] });
+      setSelectedOpex((prev) => prev.filter((oid) => oid !== id));
+      setAttachedOpexDetails((prev) => prev.filter((item) => item.id !== id));
+      setShowDeleteOpexModal(false);
+      setDeleteOpexTarget(null);
+      setStatusMsg("OPEX deleted.");
+    },
+    onError: () => setStatusMsg("Failed to delete OPEX."),
   });
 
   const months = selectedCampaign ? monthRange(campaignForm?.start_date, campaignForm?.end_date) : [];
@@ -724,9 +739,9 @@ const CampaignsPage = () => {
                         <div className="text-xs text-muted">
                           {item?.category || "N/A"} - {item?.cost_bdt ? `${item.cost_bdt} ${currency}` : "Cost N/A"}
                         </div>
-                        <div className="text-xs text-muted">
-                          {item?.start_month || "n/a"} {"→"} {item?.end_month || "ongoing"}
-                        </div>
+                          <div className="text-xs text-muted">
+                            {item?.start_month || "n/a"} {" - "} {item?.end_month || "ongoing"}
+                          </div>
                         {!item && <span className="text-xs text-muted">missing id: {id}</span>}
                       </div>
                     );
@@ -821,25 +836,30 @@ const CampaignsPage = () => {
       )}
 
       {showOpexModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-bg/80">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-bg/80 backdrop-blur-sm">
           <div className="bg-surface rounded-lg shadow-xl w-full max-w-5xl p-6 space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-lg font-semibold">Attach OPEX to campaign</h3>
                 <p className="text-sm text-muted">Select existing OPEX or create a new one, then save the campaign to persist.</p>
               </div>
-              <button className="text-muted" onClick={() => setShowOpexModal(false)}>
-                ?
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  className="bg-accent text-bg px-3 py-2 rounded-md font-semibold"
+                  onClick={() => setShowCreateOpex(true)}
+                >
+                  Create OPEX
+                </button>
+                <button className="text-muted" onClick={() => setShowOpexModal(false)}>
+                  ×
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="border border-border/70 rounded-lg p-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="font-semibold">Available OPEX</h4>
-                  <button className="bg-accent text-bg px-3 py-2 rounded-md font-semibold" onClick={() => setShowCreateOpex(true)}>
-                    Create OPEX
-                  </button>
                 </div>
                 <div className="space-y-2 max-h-[60vh] overflow-auto">
                   {opexList.length === 0 && <div className="text-sm text-muted">No OPEX items yet.</div>}
@@ -855,22 +875,36 @@ const CampaignsPage = () => {
                         <div>
                           <div className="font-semibold">{o.name}</div>
                           <div className="text-xs text-muted">
-                            {o.category} � {o.cost_bdt} {currency}
+                            {o.category} {" - "} {o.cost_bdt} {currency}
                           </div>
                           <div className="text-xs text-muted">
-                            {o.start_month || "n/a"} {"→"} {o.end_month || "ongoing"}
+                            {o.start_month || "n/a"} {" - "} {o.end_month || "ongoing"}
                           </div>
                         </div>
-                        <button
-                          className={`px-3 py-1 rounded-md border text-sm ${
-                            checked ? "border-accent text-accent" : "border-border text-muted"
-                          }`}
-                          onClick={() =>
-                            setSelectedOpex((prev) => (checked ? prev.filter((id) => id !== o.id) : [...prev, o.id]))
-                          }
-                        >
-                          {checked ? "Remove" : "Attach"}
-                        </button>
+                        <div className="flex flex-col items-end gap-2">
+                          {checked ? (
+                            <span className="px-3 py-1 rounded-md border border-border/70 text-xs text-muted">
+                              Attached
+                            </span>
+                          ) : (
+                            <button
+                              className="px-3 py-1 rounded-md border border-border/60 text-sm text-muted hover:text-text"
+                              onClick={() => setSelectedOpex((prev) => [...prev, o.id])}
+                            >
+                              Attach
+                            </button>
+                          )}
+                          <button
+                            className="px-3 py-1 rounded-md border text-xs"
+                            style={{ borderColor: "var(--color-returns)", color: "var(--color-returns)" }}
+                            onClick={() => {
+                              setDeleteOpexTarget(o);
+                              setShowDeleteOpexModal(true);
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -891,7 +925,7 @@ const CampaignsPage = () => {
                             {item?.category || "N/A"} - {item?.cost_bdt ? `${item.cost_bdt} ${currency}` : "Cost N/A"}
                           </div>
                           <div className="text-xs text-muted">
-                            {item?.start_month || "n/a"} {"→"} {item?.end_month || "ongoing"}
+                            {item?.start_month || "n/a"} {" - "} {item?.end_month || "ongoing"}
                           </div>
                           {!item && <div className="text-xs text-muted">missing id: {id}</div>}
                         </div>
@@ -922,13 +956,49 @@ const CampaignsPage = () => {
           </div>
         </div>
       )}
+      {showDeleteOpexModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg/85 backdrop-blur-sm">
+          <div className="bg-surface rounded-lg shadow-xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Delete OPEX item?</h3>
+              <button className="text-muted" onClick={() => setShowDeleteOpexModal(false)}>
+                ?
+              </button>
+            </div>
+            <p className="text-sm text-muted">
+              {deleteOpexTarget?.name || "This OPEX item"} will be removed from the library and detached from the
+              current campaign.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-4 py-2 rounded-md border border-border/60 text-muted"
+                onClick={() => setShowDeleteOpexModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 rounded-md font-semibold"
+                style={{ backgroundColor: "var(--color-returns)", color: "var(--color-text)" }}
+                onClick={() => {
+                  if (deleteOpexTarget?.id) {
+                    deleteOpexMut.mutate(deleteOpexTarget.id);
+                  }
+                }}
+                disabled={deleteOpexMut.isLoading}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showCreateOpex && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-bg/85">
           <div className="bg-surface rounded-lg shadow-xl w-full max-w-xl p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Create OPEX</h3>
               <button className="text-muted" onClick={() => setShowCreateOpex(false)}>
-                ?
+                ×
               </button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
