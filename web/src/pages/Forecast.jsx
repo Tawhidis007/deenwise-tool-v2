@@ -283,7 +283,6 @@ const ForecastPage = () => {
   const revenueLeakagePct = grossRevenue > 0 ? ((grossRevenue - effectiveRevenue) / grossRevenue) * 100 : null;
   const netMarginValue = effectiveRevenue > 0 ? ((netProfit || 0) / effectiveRevenue) * 100 : null;
   const revenueLeakageValue = grossRevenue - effectiveRevenue;
-
   const productSummary = forecast?.product_summary || [];
 
   const productLines = React.useMemo(
@@ -404,18 +403,36 @@ const ForecastPage = () => {
     [inputs, productMap]
   );
 
+  const factoryPackagingTotal = React.useMemo(
+    () =>
+      productSummary.reduce((sum, row) => {
+        const qty = Number(row.campaign_qty || 0);
+        const { manufacturing, packaging } = getProductUnitCosts(row.product_id);
+        return sum + qty * (Number(manufacturing || 0) + Number(packaging || 0));
+      }, 0),
+    [productSummary, getProductUnitCosts]
+  );
+
   // Allocate campaign totals proportionally by quantity for monthly/product rows.
   const displayRows = React.useMemo(() => {
     const campaignMarketingTotal = inputs?.campaign?.marketing_total;
+    const marketingPlan = inputs?.marketing_plan || {};
     const productTotals = baseRows.reduce((acc, row) => {
       if (acc[row.product_id]) return acc;
       const qty = Number(row.campaign_qty ?? row.qty ?? 0);
       const { manufacturing, packaging, marketing } = getProductUnitCosts(row.product_id);
       const factoryCost = qty * manufacturing;
       const packagingCost = qty * packaging;
+      const marketingPlanByProduct = marketingPlan[row.product_id] || {};
+      const marketingPlanTotal = Object.values(marketingPlanByProduct).reduce(
+        (sum, val) => sum + Number(val || 0),
+        0
+      );
       const marketingCost =
         campaignMarketingTotal !== null && campaignMarketingTotal !== undefined
           ? 0
+          : marketingPlanTotal > 0
+          ? marketingPlanTotal
           : Number(marketing || 0);
       const totalCostLocal = factoryCost + packagingCost + marketingCost;
       acc[row.product_id] = {
@@ -435,8 +452,22 @@ const ForecastPage = () => {
       if (!totals || !totals.qty) {
         return { ...row, totalCost: 0, netProfit: effRev, netMargin: null };
       }
+      const marketingPlanByProduct = marketingPlan[row.product_id] || {};
+      const marketingForMonth =
+        monthFilter !== "all" && marketingPlanByProduct
+          ? Number(marketingPlanByProduct[row.month] || 0)
+          : null;
       const share = totals.qty > 0 ? qty / totals.qty : 0;
-      const totalCost = monthFilter === "all" ? totals.totalCost : totals.totalCost * share;
+      const totalCost =
+        monthFilter === "all"
+          ? totals.totalCost
+          : totals.factoryCost * share +
+            totals.packagingCost * share +
+            (campaignMarketingTotal !== null && campaignMarketingTotal !== undefined
+              ? 0
+              : marketingForMonth !== null
+              ? marketingForMonth
+              : 0);
       const netProfit = effRev - totalCost;
       const netMargin = effRev ? (netProfit / effRev) * 100 : null;
       return {
@@ -446,7 +477,7 @@ const ForecastPage = () => {
         netMargin,
         factoryCost: totals.factoryCost * (monthFilter === "all" ? 1 : share),
         packagingCost: totals.packagingCost * (monthFilter === "all" ? 1 : share),
-        marketingCost: totals.marketingCost * (monthFilter === "all" ? 1 : share),
+        marketingCost: monthFilter === "all" ? totals.marketingCost : marketingForMonth || 0,
       };
     });
 
@@ -513,8 +544,8 @@ const ForecastPage = () => {
       const manufacturing = Number(base?.manufacturing_cost_bdt ?? 0);
       const factoryUnitCost = qty ? (packaging + manufacturing) : 0;
       const unitRevenue = qty ? (adjusted?.effective_revenue ?? p.effective_revenue ?? 0) / qty : 0;
-      const unitCost = qty ? (adjusted?.total_cost ?? p.total_cost ?? 0) / qty : 0;
-      const unitProfit = qty ? (adjusted?.net_profit ?? p.net_profit ?? 0) / qty : 0;
+      const unitCost = factoryUnitCost;
+      const unitProfit = unitRevenue - unitCost;
       const unitMargin = unitRevenue ? (unitProfit / unitRevenue) * 100 : 0;
       return {
         ...p,
@@ -531,8 +562,7 @@ const ForecastPage = () => {
     return unitBreakdown.map((row) => {
       const revenue = Number(row.unitRevenue || 0);
       const factory = Number(row.factoryUnitCost || 0);
-      const totalCost = Number(row.unitCost || 0);
-      const overhead = Math.max(0, totalCost - factory);
+      const totalCost = factory;
       const profit = Number(row.unitProfit || 0);
       const base = revenue > 0 ? revenue : 1;
       return {
@@ -541,11 +571,9 @@ const ForecastPage = () => {
         revenue,
         factory,
         totalCost,
-        overhead,
         profit,
         margin: Number(row.unitMargin || 0),
         factoryPct: Math.min(1, factory / base),
-        overheadPct: Math.min(1, overhead / base),
         profitPct: Math.max(0, profit / base),
       };
     });
@@ -933,12 +961,11 @@ const ForecastPage = () => {
                 <div>All costs including factory, marketing, and OPEX.</div>
                 <div className="pt-1 border-t border-border/60">
                   <div className="font-semibold text-text">Calculation</div>
-                  <div>Total cost = Base cost − Per‑unit marketing + Campaign marketing + OPEX</div>
+                  <div>Total cost = Manufacturing + Packaging + Campaign marketing + OPEX</div>
                   <div className="space-y-0.5 text-muted">
-                    <div>Base cost (forecast): {fmt(baseCost, currency)}</div>
-                    <div>Per‑unit marketing component: {fmt(mPerUnit, currency)}</div>
+                    <div>Manufacturing + Packaging (all products): {fmt(factoryPackagingTotal, currency)}</div>
                     <div>Campaign marketing total: {fmt(mCampaign, currency)}</div>
-                    <div>OPEX total: {fmt(baseOpex, currency)}</div>
+                    <div>OPEX total (all linked items): {fmt(baseOpex, currency)}</div>
                   </div>
                   <div className="text-text pt-1 border-t border-border/60">{fmt(totalCost, currency)}</div>
                 </div>
@@ -1076,7 +1103,23 @@ const ForecastPage = () => {
 
       <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-3">
         <div className="flex items-center justify-between">
-          <div className="text-lg font-semibold text-text">Forecast Output</div>
+          <div className="flex items-center gap-2">
+            <div className="text-lg font-semibold text-text">Forecast Output</div>
+            <InfoTooltip
+              text={
+                <div className="space-y-1">
+                  <div>
+                    Shows expected performance after discounts, returns, and product marketing spend, but before business
+                    overhead (OPEX).
+                  </div>
+                  <div>
+                    Use this view to understand how profitable each product is after running the campaign, but before fixed
+                    operating costs.
+                  </div>
+                </div>
+              }
+            />
+          </div>
           <div className="flex items-center gap-2">
             <label className="text-xs text-muted">Month</label>
             <select
@@ -1111,13 +1154,16 @@ const ForecastPage = () => {
                 <span className="font-medium text-text">Effective Revenue</span> Revenue after discounts and returns.
               </div>
               <div>
-                <span className="font-medium text-text">Total Cost</span> Fully loaded cost allocated from campaign totals.
+                <span className="font-medium text-text">Product-Level Cost</span> Manufacturing, packaging, and product
+                marketing only. Excludes OPEX and campaign-level fixed costs.
               </div>
               <div>
-                <span className="font-medium text-text">Net Profit</span> Effective Revenue minus Total Cost.
+                <span className="font-medium text-text">Contribution Profit</span> Effective Revenue minus Product-Level
+                Cost.
               </div>
               <div>
-                <span className="font-medium text-text">Net Margin</span> Net Profit as a percentage of Effective Revenue.
+                <span className="font-medium text-text">Contribution Margin</span> Contribution Profit as a percentage of
+                Effective Revenue.
               </div>
             </div>
           )}
@@ -1131,9 +1177,9 @@ const ForecastPage = () => {
                 <th className="py-2 pr-3">Qty</th>
                 <th className="py-2 pr-3">Gross Rev</th>
                 <th className="py-2 pr-3">Effective Rev (promo/discount/returns)</th>
-                <th className="py-2 pr-3">Total Cost</th>
-                <th className="py-2 pr-3">Net Profit</th>
-                <th className="py-2 pr-3">Net Margin</th>
+                <th className="py-2 pr-3">Product-Level Cost</th>
+                <th className="py-2 pr-3">Contribution Profit</th>
+                <th className="py-2 pr-3">Contribution Margin</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
@@ -1177,7 +1223,7 @@ const ForecastPage = () => {
             </button>
           </div>
           <div className="text-sm text-muted max-w-xl">
-            Gross revenue, effective revenue, and total cost comparison
+            Gross revenue, effective revenue, and Product-Level Cost comparison
           </div>
           {showForecastChart && (
             <>
@@ -1192,7 +1238,7 @@ const ForecastPage = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "var(--color-cost-total)" }} />
-                  <span>Total Cost</span>
+                  <span>Product-Level Cost</span>
                 </div>
               </div>
               <div className="border border-border/60 rounded-lg p-4 bg-surface">
@@ -1284,7 +1330,20 @@ const ForecastPage = () => {
 
       <div className="bg-card border border-border/70 rounded-xl p-5 shadow-sm space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-lg font-semibold text-text">Size Breakdown</div>
+          <div className="flex items-center gap-2">
+            <div className="text-lg font-semibold text-text">Size Breakdown</div>
+            <InfoTooltip
+              text={
+                <div className="space-y-1">
+                  <div>Shows pure unit economics by size, using only manufacturing and packaging costs.</div>
+                  <div>
+                    Marketing spend and business overhead are intentionally excluded so you can see how profitable each
+                    product is to make and sell, regardless of campaign activity.
+                  </div>
+                </div>
+              }
+            />
+          </div>
           <div className="flex items-center gap-2">
             <label className="text-xs text-muted">Product</label>
             <select
@@ -1320,17 +1379,13 @@ const ForecastPage = () => {
                 (manufacturing + packaging). Excludes marketing and business overheads.
               </div>
               <div>
-                <span className="font-medium text-text">Total Cost (Fully Loaded)</span> Factory Cost plus allocated
-                marketing spend and operational overheads (OPEX). Represents the true cost to the business per unit.
-              </div>
-              <div>
                 <span className="font-medium text-text">Revenue</span> Effective revenue after discounts and returns.
               </div>
               <div>
-                <span className="font-medium text-text">Net Profit</span> Revenue minus Total Cost (Fully Loaded).
+                <span className="font-medium text-text">Gross Profit</span> Revenue minus Factory Cost.
               </div>
               <div>
-                <span className="font-medium text-text">Net Margin</span> Net Profit as a percentage of Revenue.
+                <span className="font-medium text-text">Gross Margin</span> Gross Profit as a percentage of Revenue.
               </div>
             </div>
           )}
@@ -1344,16 +1399,14 @@ const ForecastPage = () => {
                 <th className="py-2 pr-3">Qty</th>
                 <th className="py-2 pr-3">Revenue</th>
                 <th className="py-2 pr-3">Factory Cost</th>
-                <th className="py-2 pr-3">Total Cost (Fully Loaded)</th>
-                <th className="py-2 pr-3">Net Profit</th>
-                <th className="py-2 pr-3">Net Margin</th>
+                <th className="py-2 pr-3">Gross Profit</th>
+                <th className="py-2 pr-3">Gross Margin</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
               {sizeRowsFiltered.map((r) => {
-                const margin = r.effective_revenue
-                  ? (r.net_profit / r.effective_revenue) * 100
-                  : 0;
+                const grossProfit = Number(r.effective_revenue || 0) - Number(r.factory_cost || 0);
+                const margin = r.effective_revenue ? (grossProfit / r.effective_revenue) * 100 : 0;
                 return (
                   <tr key={`${r.product_id}-${r.size}`}>
                     <td className="py-2 pr-3">{r.product_name}</td>
@@ -1361,8 +1414,7 @@ const ForecastPage = () => {
                     <td className="py-2 pr-3">{r.qty}</td>
                     <td className="py-2 pr-3">{fmt(r.effective_revenue, currency)}</td>
                     <td className="py-2 pr-3">{fmt(r.factory_cost, currency)}</td>
-                    <td className="py-2 pr-3">{fmt(r.total_cost, currency)}</td>
-                    <td className="py-2 pr-3">{fmt(r.net_profit, currency)}</td>
+                    <td className="py-2 pr-3">{fmt(grossProfit, currency)}</td>
                     <td className="py-2 pr-3">{pct(margin)}</td>
                   </tr>
                 );
@@ -1398,10 +1450,6 @@ const ForecastPage = () => {
                 <span className="font-medium text-text">Factory Unit Cost</span> Direct cost to produce a single unit
                 (manufacturing + packaging). Excludes marketing and operational overheads.
               </div>
-              <div>
-                <span className="font-medium text-text">Unit Cost (Fully Loaded)</span> Factory Unit Cost plus allocated
-                marketing spend and business overheads (OPEX). Represents the true average cost per unit to the business.
-              </div>
             </div>
           )}
         </div>
@@ -1412,7 +1460,6 @@ const ForecastPage = () => {
                 <th className="py-2 pr-3">Product</th>
                 <th className="py-2 pr-3">Unit Rev</th>
                 <th className="py-2 pr-3">Factory Unit Cost</th>
-                <th className="py-2 pr-3">Unit Cost (Fully Loaded)</th>
                 <th className="py-2 pr-3">Unit Profit</th>
                 <th className="py-2 pr-3">Unit Margin</th>
               </tr>
@@ -1423,14 +1470,13 @@ const ForecastPage = () => {
                   <td className="py-2 pr-3">{r.product_name}</td>
                   <td className="py-2 pr-3">{fmt(r.unitRevenue, currency)}</td>
                   <td className="py-2 pr-3">{fmt(r.factoryUnitCost, currency)}</td>
-                  <td className="py-2 pr-3">{fmt(r.unitCost, currency)}</td>
                   <td className="py-2 pr-3">{fmt(r.unitProfit, currency)}</td>
                   <td className="py-2 pr-3">{pct(r.unitMargin)}</td>
                 </tr>
               ))}
               {!unitBreakdown.length && (
                 <tr>
-                  <td className="py-3 text-muted" colSpan={6}>
+                  <td className="py-3 text-muted" colSpan={5}>
                     No unit metrics yet.
                   </td>
                 </tr>
@@ -1455,7 +1501,7 @@ const ForecastPage = () => {
                 <div className="flex flex-wrap items-center gap-4">
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "var(--color-cost-total)" }} />
-                    <span>Unit Cost (Fully Loaded)</span>
+                    <span>Factory Unit Cost</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "var(--color-profit)" }} />
@@ -1477,7 +1523,7 @@ const ForecastPage = () => {
                         <div
                           className="h-full"
                           style={{ width: `${costPct}%`, backgroundColor: "var(--color-cost-total)", opacity: 0.8 }}
-                          title={`Unit Cost (Fully Loaded): ${fmt(row.totalCost, currency)}`}
+                          title={`Factory Unit Cost: ${fmt(row.totalCost, currency)}`}
                         />
                         <div
                           className="h-full"
@@ -1486,7 +1532,7 @@ const ForecastPage = () => {
                         />
                       </div>
                       <div className="flex items-center justify-between text-[11px] text-muted">
-                        <span style={{ color: "var(--color-cost-total)" }}>{costPct.toFixed(1)}% Cost</span>
+                        <span style={{ color: "var(--color-cost-total)" }}>{costPct.toFixed(1)}% Factory Cost</span>
                         <span style={{ color: "var(--color-profit)" }}>{profitPct.toFixed(1)}% Profit</span>
                       </div>
                     </div>
